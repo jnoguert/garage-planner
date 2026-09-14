@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkSeg, segHitsOBB, cellHitsOBB, obbHitsOBB } from "../src/geometry.js";
+import { mkSeg, segHitsOBB, cellHitsOBB, obbHitsOBB, CELL } from "../src/geometry.js";
 
 /* ------------------------------------------------------------ obbHitsOBB -- */
 test("obbHitsOBB: dos rectangles axis-aligned que se separen just", () => {
@@ -44,7 +44,8 @@ test("segHitsOBB: cotxe orientat cap a +x, la punta toca un segment vertical", (
   assert.equal(noHit, false);
 });
 test("segHitsOBB: 4.15m exactes, el motiu pel qual existeixen els segments", () => {
-  // Amagatall real del garatge: D1=4.15 no cau a la graella de 0.5m.
+  // Amagatall real del garatge: D1=4.15 no cau a la graella, sigui quina
+  // sigui la resolucio (0.5m o els 0.1m actuals: 4.15/0.1=41.5, no enter).
   const seg = mkSeg(0, 4.15, 7.65, 4.15);
   const hit = segHitsOBB(seg, 3, 4.05, 1, 0, 2.2, 0.15);
   assert.equal(hit, true, "un cotxe centrat 10cm per sota de 4.15 amb mig ample 0.15 ha de tocar");
@@ -54,9 +55,10 @@ test("segHitsOBB: 4.15m exactes, el motiu pel qual existeixen els segments", () 
 
 /* ----------------------------------------------------------- cellHitsOBB -- */
 test("cellHitsOBB: cotxe alineat amb els eixos, dins la cel·la del costat", () => {
-  // cel·la (2,2) en metres: centre a (1.25,1.25), mig costat 0.25
+  // cel·la (2,2): centre a ((2.5)*CELL,(2.5)*CELL), independent de CELL.
+  const cc = 2.5 * CELL;
   const ex = 1.1, ey = 0.5; // hl=1.1,hw=0.5, co=1,si=0
-  const hit = cellHitsOBB(2, 2, 1.0, 1.25, 1, 0, 1.1, 0.5, ex, ey);
+  const hit = cellHitsOBB(2, 2, cc - 0.3, cc, 1, 0, 1.1, 0.5, ex, ey);
   assert.equal(hit, true);
 });
 test("cellHitsOBB: la mateixa cel·la, cotxe massa lluny", () => {
@@ -65,10 +67,10 @@ test("cellHitsOBB: la mateixa cel·la, cotxe massa lluny", () => {
 });
 test("cellHitsOBB: cotxe girat 45deg fregant la cantonada d'una cel·la", () => {
   const c = Math.SQRT1_2;
-  // cel·la (0,0): centre (0.25,0.25), semicostat 0.25. Cotxe hl=hw=0.5 girat 45deg.
+  // cel·la (0,0): centre a ((0.5)*CELL,(0.5)*CELL). Cotxe hl=hw=0.5 girat 45deg.
   const ex = 0.5 * (c + c), ey = ex;
-  const hit = cellHitsOBB(0, 0, 0.8, 0.8, c, c, 0.5, 0.5, ex, ey);
+  const hit = cellHitsOBB(0, 0, 0.45, 0.45, c, c, 0.5, 0.5, ex, ey);
   assert.equal(hit, true);
-  const noHit = cellHitsOBB(0, 0, 0.95, 0.95, c, c, 0.5, 0.5, ex, ey);
+  const noHit = cellHitsOBB(0, 0, 0.55, 0.55, c, c, 0.5, 0.5, ex, ey);
   assert.equal(noHit, false);
 });

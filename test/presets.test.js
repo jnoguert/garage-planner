@@ -1,13 +1,16 @@
-/* Linia base de la migracio.
+/* Linia base de regressio (no ja de migracio).
 
-   baseline.json es va generar executant el motor del prototip original
-   (legacy/legacy-engine.html, L217-576) amb Node, abans de tocar res. Aquest
-   test exigeix que els moduls nous donin EXACTAMENT els mateixos numeros per
-   als 6 presets: 49 cotxes, amb la ronda, les maniobres i la llargada del
-   recorregut al centimetre.
-
-   Si aquest test falla, la refactoritzacio ha canviat el comportament del
-   motor, encara que "sembli" que va be a la pantalla. */
+   Originalment baseline.json es va generar executant el motor del prototip
+   original (legacy/legacy-engine.html, L217-576) — provava que la migracio a
+   moduls no havia canviat res. Des que la resolucio de dibuix va pujar de
+   0,5 m a 0,1 m (CELL a src/geometry.js) aquesta comparacio ja no te sentit:
+   es un canvi de comportament deliberat, no un bug de migracio, i els
+   numeros exactes (llargada de recorregut, alguna maniobra) es mouen amb la
+   graella mes fina. baseline.json es va regenerar executant EL MOTOR ACTUAL
+   contra si mateix, i ara fa de linia de regressio cap al futur: si un canvi
+   al planificador o a la col·lisio mou algun d'aquests numeros, aquest test
+   ho ha de dir — i llavors cal decidir si el canvi era intencionat i
+   regenerar la linia base, o si era un bug. */
 
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -269,3 +269,41 @@ export async function evacuate(world, cars, opts, onProgress) {
   await onProgress?.(1);
   return { out, stuck, diag, order: out.map((o) => o.id) };
 }
+
+/* --------------------------------------------------------- maniobres ------ */
+
+function wrapAngle(a) { let d = a % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
+
+/* Desglossa un `path` (el que retorna plan()/evacuate() a `out[].path`) en
+   maniobres: trams seguits en la mateixa marxa, amb la distancia recorreguda
+   i cap a quin costat giren en conjunt. El nombre de trams menys 1 es
+   exactament `man` (el comptador de canvis de marxa que ja fa servir la UI).
+
+   ponytail: "turn" es el gir NET del tram (suma dels increments d'angle,
+   no el gir instantani) — un tram que corba a la dreta i despres a
+   l'esquerra en la mateixa marxa pot sortir "recte" si els dos es
+   compensen. Prou per a un resum llegible; si algun dia cal el detall
+   exacte, ja hi ha el `path` sencer per dibuixar-lo punt a punt. */
+export function summariseManeuvers(path) {
+  if (!path || path.length < 2) return [];
+  const steps = [];
+  let i = 1;
+  while (i < path.length) {
+    const dir = path[i].dir;
+    let j = i, dist = 0, dth = 0;
+    while (j < path.length && path[j].dir === dir) {
+      dist += Math.hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y);
+      dth += wrapAngle(path[j].th - path[j - 1].th);
+      j++;
+    }
+    if (dist > 1e-6) {
+      steps.push({
+        dir: dir < 0 ? "enrere" : "endavant",
+        distance: dist,
+        turn: Math.abs(dth) < 0.08 ? "recte" : (dth > 0 ? "dreta" : "esquerra"),
+      });
+    }
+    i = j;
+  }
+  return steps;
+}

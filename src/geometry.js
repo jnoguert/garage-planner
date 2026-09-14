@@ -5,8 +5,12 @@
    i els segments de paret exactes. Les dues fonts de mur conviuen — el
    planificador no sap quina ve d'on. */
 
-export const VOID = 0, ASPH = 1, SPOT = 2, EXIT = 3;
-export const CELL = 0.5;                    // metres per cel·la de dibuix
+export const VOID = 0, ASPH = 1, SPOT = 2, EXIT = 3, ENTRANCE = 4;
+export const CELL = 0.1;                    // metres per cel·la de dibuix
+
+/* ENTRANCE es nomes informatiu: per al planificador i per exitField() es
+   transitable exactament com ASPH/SPOT (tot el que no es VOID ni EXIT es
+   "terra"). No cal cap comprovacio especial enlloc mes. */
 
 export const idx = (world, c, r) => r * world.cols + c;
 export const inBounds = (world, c, r) => c >= 0 && r >= 0 && c < world.cols && r < world.rows;
