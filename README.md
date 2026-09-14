@@ -24,7 +24,7 @@ ES nadius servits tal qual.
 npm test
 ```
 
-`node --test`, sense framework ni dependencies. Uns 47 tests en ~3 s,
+`node --test`, sense framework ni dependencies. Uns 56 tests en ~3 s,
 inclosos dos de regressio per als bugs reals que hem trobat al planificador
 (vegeu `test/planner-regression.test.js`):
 
@@ -66,10 +66,32 @@ navegador.
 
 Un llapis per material (calçada/plaça/mur-pilar/entrada/sortida/cotxe) i una
 goma universal: si hi ha un cotxe sota el cursor l'esborra, si no converteix
-la cel·la en calçada oberta. "Entrada" es un tipus de cel·la purament
-informatiu (transitable com qualsevol altra, vegeu `ENTRANCE` a
-`geometry.js`). Els murs que dibuixes queden acotats en metres (render.js,
+la cel·la en calçada oberta. "Entrada" (`ENTRANCE` a `geometry.js`) es
+transitable com qualsevol altra cel·la per a la col·lisio, pero te sentit
+propi al planificador: es l'objectiu del mode "Entrada" (vegeu mes avall).
+Els murs que dibuixes queden acotats en metres (render.js,
 `wallBoundaryRuns`), igual que els segments exactes d'un plànol importat.
+
+### Sortida, entrada, o totes dues
+
+El panell "Què comprova" tria que es simula, sempre en el pitjor cas (tots
+els cotxes aparcats, cadascun a la seva plaça — vegeu la seccio seguent):
+
+- **Sortida** (`evacuate()`): de la plaça de cada cotxe fins a la sortida
+  mes propera.
+- **Entrada** (`arrive()`): de l'entrada mes propera fins a la plaça de
+  cada cotxe. No es un cercador nou: el model cinematic d'aquest motor es
+  reversible (recorrer un arc endavant amb un angle de volant concret i
+  despres recorrer'l en sentit contrari amb el MATEIX angle torna
+  exactament al punt de partida), aixi que `arrive()` fa la mateixa cerca
+  que `evacuate()` pero cap a `ENTRANCE` en lloc de `EXIT`, i gira el
+  recorregut trobat (`reversePath()`). Cal haver dibuixat una cel·la
+  d'entrada; si no n'hi ha, el simulador ho diu en lloc de fer un calcul
+  que no vol dir res.
+- **Entrada i sortida** (`checkBothWays()`): un cotxe nomes compta com a
+  accessible si pot fer les dues coses; si en falla nomes una, es
+  diagnostica cada sentit per separat (un cotxe pot entrar-hi be i quedar
+  tapat nomes en sortir, o al reves).
 
 ### Garatges desats i tema
 
