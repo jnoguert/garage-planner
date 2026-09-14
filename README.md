@@ -1,7 +1,7 @@
 # garage-planner
 
 Simulador de sortida d'aparcament. Dibuixes una planta (parets, places,
-sortides) en una graella de 0,5 m, hi col·loques cotxes amb mides i angles de
+sortides) en una graella de 10 cm, hi col·loques cotxes amb mides i angles de
 gir reals, i el motor calcula si cada cotxe pot arribar a la sortida — sol o
 amb altres cotxes pel mig — fent marxa enrere si cal, amb col·lisio exacta
 contra parets i altres cotxes.
@@ -24,7 +24,7 @@ ES nadius servits tal qual.
 npm test
 ```
 
-`node --test`, sense framework ni dependencies. Uns 40 tests en ~2 s,
+`node --test`, sense framework ni dependencies. Uns 47 tests en ~3 s,
 inclosos dos de regressio per als bugs reals que hem trobat al planificador
 (vegeu `test/planner-regression.test.js`):
 
@@ -61,6 +61,19 @@ legacy/           el prototip original d'un sol fitxer, com a referencia
 geometria, el planificador i l'escena es poden provar amb Node sense
 navegador.
 
+### Dibuix
+
+Un llapis per material (calçada/plaça/mur-pilar/entrada/sortida/cotxe) i una
+goma universal: si hi ha un cotxe sota el cursor l'esborra, si no converteix
+la cel·la en calçada oberta. "Entrada" es un tipus de cel·la purament
+informatiu (transitable com qualsevol altra, vegeu `ENTRANCE` a
+`geometry.js`). Els murs que dibuixes queden acotats en metres (render.js,
+`wallBoundaryRuns`), igual que els segments exactes d'un plànol importat.
+
+Els resultats de "Comprova les sortides" inclouen el desglossament de
+maniobres de cada cotxe (`summariseManeuvers` a `planner.js`): un tram per
+marxa, amb la distancia i cap a quin costat gira.
+
 ### Dades de vehicles i el gir
 
 Cada entrada de `data/fleet.json` porta un camp `turningMeasure` explicit
@@ -80,7 +93,7 @@ un JSON local curat a ma: un humà ho ha comprovat, no una API.
 `tools/import_plan.py` converteix una llista de segments de paret d'un
 plànol real (CSV `x1,y1,x2,y2` en metres) a crides `mkSeg()` per enganxar a
 un preset de `src/scene.js` — es el que fa falta quan les cotes no cauen a
-la graella de 0,5 m (com el garatge real de l'exemple, amb una paret a
+la graella (com el garatge real de l'exemple, amb una paret a
 4,15 m).
 
 ## Despleg
@@ -100,7 +113,7 @@ de `/garage-planner/`.
   preferencies de pas.
 - La col·lisio es exacta: rectangle contra rectangle per als cotxes i
   rectangle contra segment per a les parets del planol importat. Les
-  parets que dibuixes a ma, en canvi, son cel·les de 50 cm i queden
+  parets que dibuixes a ma, en canvi, son cel·les de 10 cm i queden
   arrodonides a la graella.
 - Les volades davantera i posterior de cada model son una estimacio: els
   fabricants publiquen la llargada i la batalla, pero rarament el

@@ -21,8 +21,10 @@ export function fillRectM(world, x0, y0, x1, y1, type) {
 }
 
 /* Qualsevol canvi al dibuix ha de passar per aqui: si no, el camp de murs
-   memoritzat es queda ranci i freeAt() es salta comprovacions que hauria de fer. */
-export function touch(world) { world._wall = null; }
+   memoritzat es queda ranci i freeAt() es salta comprovacions que hauria de fer.
+   `_staticCache` es la capa de render memoritzada (render.js); tambe cal
+   buidar-la o el dibuix es queda vell. */
+export function touch(world) { world._wall = null; world._staticCache = null; }
 
 export function setCell(world, c, r, type) {
   if (!inBounds(world, c, r)) return false;

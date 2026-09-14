@@ -1,9 +1,9 @@
 /* Cablejat del DOM: events, panells, HUD, animacio de resultats. Cap logica
    de motor viu aqui — nomes crida als moduls i pinta el que retornen. */
 
-import { VOID, ASPH, SPOT, EXIT, CELL } from "./geometry.js";
+import { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL } from "./geometry.js";
 import { newWorld, setCell, resize as resizeWorld, hasExit, makeCars, presets } from "./scene.js";
-import { evacuate } from "./planner.js";
+import { evacuate, summariseManeuvers } from "./planner.js";
 import { FLEET, spec, specOf } from "./vehicle.js";
 import { makeView, draw } from "./render.js";
 
@@ -14,7 +14,7 @@ const S = {
   world: newWorld(56, 36),
   cars: makeCars(),
   tool: "asphalt",
-  brush: 2,
+  brush: 10,               // en cel·les; sincronitzat amb el llisquet en metres
   angle: 270,
   veh: 1,                 // index a FLEET del "model seleccionat" al panell
   sel: -1,
@@ -40,6 +40,7 @@ function redraw() {
   draw(V, S.world, S.cars, {
     sel: S.sel, play: S.playing, hover: S.hover, tool: S.tool,
     curSpec: S.tool === "car" ? curSpec() : null,
+    previewTh: S.angle * Math.PI / 180,
     statusOf,
   });
 }
@@ -55,8 +56,9 @@ function statusOf(id) {
 }
 
 /* --------------------------------------------------------------- pintura -- */
-function paintAt(p) {
-  const type = { asphalt: ASPH, spot: SPOT, wall: VOID, exit: EXIT }[S.tool];
+const MATERIAL = { asphalt: ASPH, spot: SPOT, wall: VOID, entrance: ENTRANCE, exit: EXIT };
+function paintAt(p, forceType) {
+  const type = forceType ?? MATERIAL[S.tool];
   if (type === undefined) return;
   const c0 = Math.floor(p.x / CELL), r0 = Math.floor(p.y / CELL);
   const half = (S.brush - 1) / 2;
@@ -106,9 +108,12 @@ cv.addEventListener("pointerdown", (e) => {
     invalidate(); return;
   }
   if (S.tool === "erase") {
+    // goma universal: si hi ha un cotxe sota el cursor, el treu; si no,
+    // converteix la cel·la en calçada oberta (mur, plaça, entrada i sortida
+    // son tots "alguna cosa dibuixada aqui" — esborrar-ho es tornar a obert).
     const hit = carAt(p.x, p.y);
-    if (hit >= 0) { S.cars.splice(hit, 1); invalidate(); }
-    drag = { mode: "erase" }; return;
+    if (hit >= 0) { S.cars.splice(hit, 1); invalidate(); drag = { mode: "erase" }; return; }
+    drag = { mode: "eraseCell" }; paintAt(p, ASPH); return;
   }
   drag = { mode: "paint" }; paintAt(p);
 });
@@ -117,6 +122,7 @@ cv.addEventListener("pointermove", (e) => {
   S.hover = p;
   if (!drag) { if (S.tool === "car") redraw(); return; }
   if (drag.mode === "paint") paintAt(p);
+  else if (drag.mode === "eraseCell") paintAt(p, ASPH);
   else if (drag.mode === "erase") { const h = carAt(p.x, p.y); if (h >= 0) { S.cars.splice(h, 1); invalidate(); } }
   else if (drag.mode === "rot") {
     const car = S.cars.find((c) => c.id === drag.id); if (!car) return;
@@ -156,7 +162,13 @@ $("tools").addEventListener("click", (e) => {
   document.querySelectorAll(".tool").forEach((t) => t.setAttribute("aria-pressed", t === b ? "true" : "false"));
   redraw();
 });
-$("brush").addEventListener("input", (e) => { S.brush = +e.target.value; $("brushVal").textContent = S.brush; });
+/* El llisquet es en metres (mes llegible); S.brush es el nombre de cel·les
+   que fa servir paintAt, derivat aqui. */
+$("brush").addEventListener("input", (e) => {
+  const m = +e.target.value;
+  S.brush = Math.max(1, Math.round(m / CELL));
+  $("brushVal").textContent = m.toFixed(1) + " m";
+});
 $("angle").addEventListener("input", (e) => {
   S.angle = +e.target.value; $("angleVal").textContent = S.angle + "°";
   const car = S.cars.find((c) => c.id === S.sel); if (car) car.th = S.angle * Math.PI / 180;
@@ -247,6 +259,16 @@ async function runSim() {
   setTimeout(() => setProgress(0), 600);
 }
 
+/* Trams del recorregut, un per marxa: "Endavant 3,40 m, girant a la dreta".
+   Ve de summariseManeuvers() (planner.js) — pura, sense DOM, ja provada. */
+function maneuverList(path) {
+  return summariseManeuvers(path).map((s, i) => {
+    const dir = s.dir === "enrere" ? "Marxa enrere" : "Endavant";
+    const turn = s.turn === "recte" ? "" : `, girant a ${s.turn === "dreta" ? "la dreta" : "l'esquerra"}`;
+    return `<li>${dir} ${s.distance.toFixed(2)} m${turn}</li>`;
+  }).join("");
+}
+
 function renderResults() {
   const { out, stuck, diag } = S.results;
   if (!stuck.length) {
@@ -268,7 +290,8 @@ function renderResults() {
       <span class="dot" style="background:var(--green)"></span>
       <span><span class="name">${label(o.id)}</span>
       <span class="why">Surt a la tanda ${o.round} · ${o.man} maniobre${o.man === 1 ? "" : "s"} · ${o.len.toFixed(1)} m</span></span>
-      <span class="num">▶</span></button>`;
+      <span class="num">▶</span></button>
+      <ol class="maneuvers">${maneuverList(o.path)}</ol>`;
     ul.appendChild(li);
   }
   const why = {
