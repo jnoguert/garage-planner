@@ -2,7 +2,7 @@
    parametre, i per aixo es pot provar amb Node sense navegador. */
 
 import {
-  VOID, EXIT, CELL, idx, inBounds,
+  VOID, EXIT, ENTRANCE, CELL, idx, inBounds,
   segHitsOBB, cellHitsOBB, obbHitsOBB, wallField, MinHeap,
 } from "./geometry.js";
 import { specOf } from "./vehicle.js";
@@ -97,18 +97,19 @@ export function cellTypeAt(world, x, y) {
 
 /* ----------------------------------------------------------- heuristica --- */
 
-/* Distancia en planta des de qualsevol cel·la fins a la sortida mes propera:
-   escalfa el Hybrid A*. Dijkstra a 8 veins sobre la graella de dibuix.
+/* Distancia en planta des de qualsevol cel·la fins a la cel·la mes propera
+   de `targetType` (EXIT per sortir, ENTRANCE per entrar-hi): escalfa el
+   Hybrid A*. Dijkstra a 8 veins sobre la graella de dibuix.
 
    Float64Array, no Float32Array: amb float32 l'arrodoniment (~1e-7 en aquestes
    magnituds) supera l'epsilon d'1e-9 de sota, la mateixa cel·la es torna a
    encuar indefinidament i la cua no es buida mai. Es el bug 1. */
-export function exitField(world, stats) {
+export function exitField(world, targetType = EXIT, stats) {
   const { cols, rows, grid } = world;
   const N = cols * rows;
   const d = new Float64Array(N).fill(Infinity);
   const pq = new MinHeap();
-  for (let i = 0; i < N; i++) if (grid[i] === EXIT) { d[i] = 0; pq.push(0, i); }
+  for (let i = 0; i < N; i++) if (grid[i] === targetType) { d[i] = 0; pq.push(0, i); }
   const D8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
               [1, 1, 1.4142], [1, -1, 1.4142], [-1, 1, 1.4142], [-1, -1, 1.4142]];
   let pops = 0;
@@ -135,10 +136,13 @@ export function exitField(world, stats) {
 
 /* --------------------------------------------------------- planificador --- */
 
-/* Hybrid A* sobre (x, y, angle) amb marxa endavant i enrere.
+/* Hybrid A* sobre (x, y, angle) amb marxa endavant i enrere, des de la
+   posicio actual del cotxe fins a qualsevol cel·la de `goalType` (EXIT per
+   defecte; ENTRANCE per calcular — combinat amb reversePath() — el
+   recorregut invers d'entrada, vegeu arrive() mes avall).
    Retorna {ok, path, man, len, expanded} o {ok:false, reason, expanded}.
    reason: "start" | "noroute" | "budget". */
-export function plan(world, car, obs, hf, v, opts) {
+export function plan(world, car, obs, hf, v, opts, goalType = EXIT) {
   const nx = Math.ceil(world.cols * CELL / XYBIN), ny = Math.ceil(world.rows * CELL / XYBIN);
   // Float64Array tambe aqui, i pel mateix motiu que a exitField(): amb float32
   // el cost arrodonit supera l'epsilon d'1e-6 i el closed set deixa de tancar.
@@ -179,7 +183,7 @@ export function plan(world, car, obs, hf, v, opts) {
     const kk = key(cx, cy, cth);
     if (kk >= 0 && cg > closed[kk] + 1e-6) continue;
     const ctr = centreFromRear(cx, cy, cth, v);
-    if (cellTypeAt(world, ctr.cx, ctr.cy) === EXIT) { goal = cur; break; }
+    if (cellTypeAt(world, ctr.cx, ctr.cy) === goalType) { goal = cur; break; }
     if (++expanded > MAX_EXPAND) return { ok: false, reason: "budget", expanded };
 
     for (const dir of dirs) {
@@ -219,18 +223,39 @@ export function plan(world, car, obs, hf, v, opts) {
 
 /* ------------------------------------------------------------ evacuacio --- */
 
-/* Cada cotxe es comprova de manera independent, amb TOTS els altres
-   aparcats exactament on son — mai se suposa que algun altre ja ha sortit
-   per fer-li lloc. Aixo es deliberat: un cotxe ha de poder sortir tal com
-   esta la planta ara, no nomes en una seqüencia hipotetica en que uns
-   altres es mouen primer. (Versio antiga: evacuacio "per rondes", on un
-   cotxe que nomes podia sortir despres que un altre marxés es donava per
-   bo — es va treure perque donava per suposat un ordre que ningu garanteix.)
+/* El model cinematic d'aquest motor es reversible: recorrer un arc endavant
+   amb un angle de volant concret i despres recorrer'l en sentit contrari amb
+   el MATEIX angle (marxa enrere en lloc d'endavant) torna exactament al
+   punt de partida — es pot comprovar algebraicament amb la formula de l'arc
+   de plan() (i test/access.test.js ho fa amb un recorregut real). Aixo vol
+   dir que un recorregut trobat "de la plaça cap a X" es, girat, un
+   recorregut valid "de X cap a la plaça" amb les marxes intercanviades:
+   no cal cap cercador nou per saber com s'hi entra, nomes invertir el que
+   ja en sortia. `arrive()` ho explota per no duplicar plan(). */
+export function reversePath(path) {
+  const n = path.length - 1;
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const p = path[n - i];
+    out.push({ x: p.x, y: p.y, th: p.th, dir: i === 0 ? 0 : -path[n - i + 1].dir });
+  }
+  return out;
+}
 
-   `onProgress` es opcional i pot retornar una promesa; l'app l'aprofita per
-   cedir el fil i moure la barra. Els tests no la passen. */
-export async function evacuate(world, cars, opts, onProgress) {
-  const hf = exitField(world);
+/* Nucli comu a evacuate()/arrive(): cada cotxe es comprova de manera
+   independent, amb TOTS els altres aparcats exactament on son — mai se
+   suposa que algun altre ja ha sortit (o encara no ha arribat) per fer-li
+   lloc. Aixo es deliberat: un cotxe ha de poder sortir/entrar tal com esta
+   la planta ara, no nomes en una seqüencia hipotetica en que uns altres es
+   mouen primer. (Versio antiga d'evacuate(): "per rondes", on un cotxe que
+   nomes podia sortir despres que un altre marxés es donava per bo — es va
+   treure perque donava per suposat un ordre que ningu garanteix.)
+
+   `goalType` es EXIT (sortida) o ENTRANCE (pas previ d'arrive(), abans de
+   girar el recorregut). `onProgress` es opcional i pot retornar una
+   promesa; l'app l'aprofita per cedir el fil i moure la barra. */
+async function checkDirection(world, cars, opts, goalType, onProgress) {
+  const hf = exitField(world, goalType);
   const allIds = cars.map((c) => c.id);
   const out = [], stuck = [];
   const diag = {};
@@ -240,7 +265,7 @@ export async function evacuate(world, cars, opts, onProgress) {
   for (const car of cars) {
     const others = allIds.filter((id) => id !== car.id);
     const withOthers = obstaclesFor(world, cars, car.id, others);
-    const res = plan(world, car, withOthers, hf, specOf(car), opts);
+    const res = plan(world, car, withOthers, hf, specOf(car), opts, goalType);
     if (res.ok) {
       out.push({ id: car.id, path: res.path, man: res.man, len: res.len, present: others });
     } else {
@@ -249,7 +274,7 @@ export async function evacuate(world, cars, opts, onProgress) {
       // culpa dels altres cotxes — distingeix "el tapen" de "no hi ha espai".
       const v = specOf(car);
       const alone = obstaclesFor(world, cars, car.id, []);
-      const resAlone = plan(world, car, alone, hf, v, opts);
+      const resAlone = plan(world, car, alone, hf, v, opts, goalType);
       if (resAlone.ok) diag[car.id] = { kind: "blocked" };
       else if (resAlone.reason === "start") {
         const st = rearAxle(car, v);
@@ -260,6 +285,42 @@ export async function evacuate(world, cars, opts, onProgress) {
     await onProgress?.(done / total);
   }
   return { out, stuck, diag, order: out.map((o) => o.id) };
+}
+
+/* Sortida: de la plaça de cadascu cap a la sortida mes propera. */
+export function evacuate(world, cars, opts, onProgress) {
+  return checkDirection(world, cars, opts, EXIT, onProgress);
+}
+
+/* Entrada: de l'entrada mes propera cap a la plaça de cadascu. Es calcula
+   com una "sortida" cap a ENTRANCE (mateix cercador, cap codi nou) i
+   despres es giren els recorreguts trobats — vegeu reversePath(). */
+export async function arrive(world, cars, opts, onProgress) {
+  const r = await checkDirection(world, cars, opts, ENTRANCE, onProgress);
+  return { ...r, out: r.out.map((o) => ({ ...o, path: reversePath(o.path) })) };
+}
+
+/* Entrada i sortida: cada cotxe ha de poder fer les dues coses, amb tots
+   els altres aparcats. Nomes compta com a "surt" (out) si hi arriba en
+   totes dues direccions; si en falla alguna, stuck amb el diagnostic de
+   cadascuna (una pot anar be i l'altra no: p.ex. cap justet nomes en un
+   sentit no es el mateix problema geometric). */
+export async function checkBothWays(world, cars, opts, onProgress) {
+  const exitR = await checkDirection(world, cars, opts, EXIT, (p) => onProgress?.(p * 0.5));
+  const entryR = await arrive(world, cars, opts, (p) => onProgress?.(0.5 + p * 0.5));
+  const exitById = new Map(exitR.out.map((o) => [o.id, o]));
+  const entryById = new Map(entryR.out.map((o) => [o.id, o]));
+  const out = [], stuck = [];
+  const diag = {};
+  for (const car of cars) {
+    const ex = exitById.get(car.id), en = entryById.get(car.id);
+    if (ex && en) out.push({ id: car.id, exit: ex, entry: en });
+    else {
+      stuck.push(car.id);
+      diag[car.id] = { exit: ex ? "ok" : exitR.diag[car.id], entry: en ? "ok" : entryR.diag[car.id] };
+    }
+  }
+  return { out, stuck, diag };
 }
 
 /* --------------------------------------------------------- maniobres ------ */

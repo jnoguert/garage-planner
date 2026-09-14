@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { presets } from "../src/scene.js";
-import { VOID, CELL, idx, inBounds } from "../src/geometry.js";
+import { VOID, EXIT, CELL, idx, inBounds } from "../src/geometry.js";
 import { specOf } from "../src/vehicle.js";
 import { exitField, obstaclesFor, plan, evacuate } from "../src/planner.js";
 
@@ -32,7 +32,7 @@ for (const name of ["bateria", "estret", "tandem"]) {
   test(`bug 1: exitField("${name}") no reomple la cua`, () => {
     const { world } = presets[name]();
     const stats = {};
-    const d = exitField(world, stats);
+    const d = exitField(world, EXIT, stats);
     const N = world.cols * world.rows;
 
     assert.ok(d instanceof Float64Array,

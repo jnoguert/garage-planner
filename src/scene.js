@@ -53,6 +53,7 @@ export function resize(world, cols, rows) {
 }
 
 export function hasExit(world) { return world.grid.includes(EXIT); }
+export function hasEntrance(world) { return world.grid.includes(ENTRANCE); }
 
 /* ---------------------------------------------------------------- cotxes -- */
 
