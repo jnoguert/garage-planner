@@ -11,6 +11,11 @@ import { specOf } from "./vehicle.js";
 export const PALETTE = ["#93a6b3", "#b57a63", "#7a9a76", "#9789b4", "#c2a45c", "#6f9aa8", "#b0798f", "#849070"];
 
 export function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+/* `--xxx-rgb` es defineix al CSS com a triplet "r,g,b" (sense "rgba(...)")
+   nomes per a aixo: construir un color amb l'alpha que calgui en cada cas,
+   sense hardcodejar el mateix RGB dues vegades (un a --xxx i un altre aqui)
+   ni haver de mantenir sincronitzats dos temes a ma. */
+export function cssRgba(n, alpha) { return `rgba(${css(n + "-rgb")},${alpha})`; }
 
 export function makeView(cv) {
   const ctx = cv.getContext("2d");
@@ -200,6 +205,14 @@ function entranceOpenings(world, minLen) {
   return openings;
 }
 
+/* El xip de les etiquetes de mesura es sempre fosc amb text clar,
+   independentment del tema clar/fosc de la pagina: al damunt hi pot haver
+   calçada, plaça o sortida de qualsevol color, i un xip d'alt contrast fix
+   es llegeix be sobre tots — mes senzill que fer-lo dependre del tema. */
+const DIM_CHIP_BG = "rgba(18,20,23,.82)";
+const DIM_CHIP_TEXT = "#c7ccd2";
+const DIM_CHIP_ENTRANCE_TEXT = "#8ecdf0";
+
 function drawDimensions(V, world) {
   const { ctx, px, py, view: { s } } = V;
   if (s < 14) return;                    // massa lluny per llegir-hi res
@@ -216,9 +229,9 @@ function drawDimensions(V, world) {
     const label = len.toFixed(2) + " m";
     const tw = ctx.measureText(label).width;
     const tx = px(mx) + ox, ty = py(my) + oy;
-    ctx.fillStyle = "rgba(20,23,26,.72)";
+    ctx.fillStyle = DIM_CHIP_BG;
     ctx.fillRect(tx - tw / 2 - 4, ty - s * 0.15, tw + 8, s * 0.30);
-    ctx.fillStyle = css("--ink-dim");
+    ctx.fillStyle = DIM_CHIP_TEXT;
     ctx.fillText(label, tx, ty);
   }
 
@@ -227,9 +240,9 @@ function drawDimensions(V, world) {
     const label = "↔ " + o.width.toFixed(2) + " m";
     const tw = ctx.measureText(label).width;
     const tx = px(o.cx) + (o.horiz ? 0 : s * 0.5), ty = py(o.cy) + (o.horiz ? s * 0.34 : 0);
-    ctx.fillStyle = "rgba(20,23,26,.78)";
+    ctx.fillStyle = DIM_CHIP_BG;
     ctx.fillRect(tx - tw / 2 - 4, ty - s * 0.15, tw + 8, s * 0.30);
-    ctx.fillStyle = css("--focus");
+    ctx.fillStyle = DIM_CHIP_ENTRANCE_TEXT;
     ctx.fillText(label, tx, ty);
   }
 }
@@ -257,8 +270,8 @@ function buildStaticLayer(world, view) {
   for (let r = 0; r < world.rows; r++) for (let c = 0; c < world.cols; c++) {
     const t = world.grid[idx(world, c, r)];
     if (t === VOID) continue;
-    ctx.fillStyle = t === SPOT ? css("--asphalt-lit") : t === EXIT ? "rgba(53,160,106,.30)"
-                  : t === ENTRANCE ? "rgba(111,183,216,.22)" : css("--asphalt");
+    ctx.fillStyle = t === SPOT ? css("--asphalt-lit") : t === EXIT ? cssRgba("--green", .30)
+                  : t === ENTRANCE ? cssRgba("--focus", .22) : css("--asphalt");
     ctx.fillRect(px(c * CELL), py(r * CELL), cs + .6, cs + .6);
   }
 
@@ -274,7 +287,7 @@ function buildStaticLayer(world, view) {
   }
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(140,150,160,.55)"; ctx.lineWidth = Math.max(1, s * 0.06); ctx.beginPath();
+  ctx.strokeStyle = css("--wall-edge"); ctx.lineWidth = Math.max(1, s * 0.06); ctx.beginPath();
   for (let r = 0; r < world.rows; r++) for (let c = 0; c < world.cols; c++) {
     if (world.grid[idx(world, c, r)] !== VOID) continue;
     const x = px(c * CELL), y = py(r * CELL);
@@ -302,7 +315,7 @@ function buildStaticLayer(world, view) {
   }
 
   if (world.segs.length) {
-    ctx.strokeStyle = "rgba(190,200,210,.85)"; ctx.lineWidth = Math.max(1.6, s * 0.10);
+    ctx.strokeStyle = css("--wall"); ctx.lineWidth = Math.max(1.6, s * 0.10);
     ctx.lineCap = "round"; ctx.beginPath();
     for (const g of world.segs) { ctx.moveTo(px(g.x1), py(g.y1)); ctx.lineTo(px(g.x2), py(g.y2)); }
     ctx.stroke(); ctx.lineCap = "butt";
@@ -361,7 +374,7 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
 
   if (hover && tool === "car" && curSpec) {
     ctx.globalAlpha = .45;
-    drawCar(V, { cx: hover.x, cy: hover.y, th: previewTh ?? 0 }, curSpec, "#cfd6dc", null, false, null, false);
+    drawCar(V, { cx: hover.x, cy: hover.y, th: previewTh ?? 0 }, curSpec, css("--ghost"), null, false, null, false);
     ctx.globalAlpha = 1;
   }
 }

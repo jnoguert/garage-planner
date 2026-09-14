@@ -58,10 +58,14 @@ export function hasExit(world) { return world.grid.includes(EXIT); }
 
 /* Un cotxe: {id, t, cx, cy, th, override?}. `t` es l'index a FLEET, `cx/cy` el
    centre del COS en metres, `th` en radians. `override` son cotes entrades a
-   ma i valen nomes per a aquest cotxe. */
-export function makeCars() {
-  let nextId = 1;
-  const cars = [];
+   ma i valen nomes per a aquest cotxe.
+
+   `existing` (opcional): cotxes ja fets, per exemple recuperats d'un
+   garatge desat (storage.js) — `nextId` continua just despres del mes alt
+   que ja hi hagi, aixi es pot seguir afegint-ne sense repetir id. */
+export function makeCars(existing = []) {
+  let nextId = existing.reduce((m, c) => Math.max(m, c.id), 0) + 1;
+  const cars = existing.slice();
   cars.addM = (xm, ym, deg, t) => {          // en metres, per a planols reals
     const car = { id: nextId++, t, cx: xm, cy: ym, th: deg * Math.PI / 180 };
     cars.push(car); return car;
@@ -135,11 +139,15 @@ export const presets = {
     return { world, cars, veh: GENERIC };
   },
 
-  /* Planta real: L de 19,70 x 4,15 m amb bloc esquerre de 7,65 x 8,01 m, porta
-     a l'extrem dret. Les parets van com a SEGMENTS exactes perque 4,15 m no cau
-     a la quadricula (ni a 0,5 m ni als 0,1 m actuals); la graella nomes s'hi
-     ajusta per sobre, mai per dins. Es exactament el cas per al qual existeix
-     segHitsOBB(). */
+  /* Planta real (garatge d'un usuari concret): L de 19,70 x 4,15 m amb bloc
+     esquerre de 7,65 x 8,01 m, porta a l'extrem dret. Les parets van com a
+     SEGMENTS exactes perque 4,15 m no cau a la quadricula (ni a 0,5 m ni als
+     0,1 m actuals); la graella nomes s'hi ajusta per sobre, mai per dins. Es
+     exactament el cas per al qual existeix segHitsOBB().
+     No es un preset de l'aplicacio (no hi ha boto a la UI: es una planta
+     d'una persona concreta, no un exemple generic) — es queda nomes com a
+     fixture dels tests, que ja el fan servir per provar segments exactes i
+     folgances real·les. Per desar la teva propia planta, vegeu storage.js. */
   garatge() {
     const world = nw(54, 18), cars = makeCars();
     fr(world, 0, 0, 39, 8, ASPH);      // brac superior, y 0-4,15

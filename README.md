@@ -51,6 +51,7 @@ src/planner.js    Hybrid A*, heuristica i evacuacio per rondes
 src/scene.js      el "world" (graella+segments+cotxes) i els 6 presets
 src/render.js     tot el dibuix a canvas
 src/app.js        cablejat del DOM: events, panells, animacio
+src/storage.js    desar/carregar garatges a localStorage, per navegador
 data/fleet.json   dades de vehicles curades a ma
 test/             node --test
 tools/            scripts Python (biblioteca estandard, sense dependencies)
@@ -69,6 +70,25 @@ la cel·la en calçada oberta. "Entrada" es un tipus de cel·la purament
 informatiu (transitable com qualsevol altra, vegeu `ENTRANCE` a
 `geometry.js`). Els murs que dibuixes queden acotats en metres (render.js,
 `wallBoundaryRuns`), igual que els segments exactes d'un plànol importat.
+
+### Garatges desats i tema
+
+"Els teus garatges" desa la planta i els cotxes actuals a `localStorage`
+(`src/storage.js`) sota un nom que tu tries — per navegador, sense backend
+ni sincronitzacio entre dispositius, coherent amb "lloc totalment estatic".
+
+El mode clar/fosc segueix la preferencia del sistema per defecte
+(`@media prefers-color-scheme`) i es pot canviar amb el boto de dalt de tot
+del panell esquerre; la tria explicita es desa i guanya sempre per sobre
+del sistema. El canvas llegeix els colors amb `getComputedStyle` en pintar
+(`render.js`), aixi que els dos temes es mantenen amb les mateixes variables
+CSS, no amb dos dibuixos diferents.
+
+Els presets `garatge`/`garatge3` (la planta real d'un usuari concret, amb
+segments exactes i cotxes reals) ja no tenen boto a la UI — eren massa
+especifics per a una eina d'us general — pero es queden a `scene.js` com a
+fixture dels tests, que ja els feien servir per provar la col·lisio contra
+segments exactes.
 
 Els resultats de "Comprova les sortides" inclouen el desglossament de
 maniobres de cada cotxe (`summariseManeuvers` a `planner.js`): un tram per

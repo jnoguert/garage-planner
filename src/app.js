@@ -6,6 +6,7 @@ import { newWorld, setCell, resize as resizeWorld, hasExit, makeCars, presets } 
 import { evacuate, summariseManeuvers } from "./planner.js";
 import { FLEET, spec, specOf } from "./vehicle.js";
 import { makeView, draw } from "./render.js";
+import { listSaves, saveGarage, loadGarage, deleteSave } from "./storage.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -188,6 +189,39 @@ function loadPreset(name) {
 }
 document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => loadPreset(b.dataset.preset)));
 
+/* ------------------------------------------------------ garatges desats -- */
+/* localStorage, per navegador (storage.js) — cap servidor, cap sincronitzacio. */
+function refreshSavedList() {
+  const ul = $("savedList"); ul.innerHTML = "";
+  for (const name of listSaves()) {
+    const li = document.createElement("li");
+    const load = document.createElement("button");
+    load.className = "load"; load.type = "button"; load.textContent = name;
+    load.addEventListener("click", () => {
+      const g = loadGarage(name);
+      if (!g) { refreshSavedList(); return; }        // algu altre l'ha esborrat mentrestant
+      S.world = g.world; S.cars = makeCars(g.cars); S.sel = -1;
+      writeFields(); invalidate(); fit();
+    });
+    const del = document.createElement("button");
+    del.className = "del"; del.type = "button"; del.title = `Esborra "${name}"`; del.textContent = "×";
+    del.addEventListener("click", () => {
+      if (!confirm(`Esborrar el garatge desat "${name}"? No es pot desfer.`)) return;
+      deleteSave(name); refreshSavedList();
+    });
+    li.append(load, del);
+    ul.appendChild(li);
+  }
+}
+$("saveGarage").addEventListener("click", () => {
+  const name = $("saveName").value.trim();
+  if (!name) { $("saveName").focus(); return; }
+  saveGarage(name, S.world, S.cars);
+  $("saveName").value = "";
+  refreshSavedList();
+});
+$("saveName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("saveGarage").click(); });
+
 $("cols").addEventListener("change", (e) => {
   resizeWorld(S.world, Math.max(16, Math.round(+e.target.value / CELL)), S.world.rows); invalidate(); fit();
 });
@@ -345,7 +379,31 @@ function playCar(id) {
 $("run").addEventListener("click", runSim);
 addEventListener("resize", fit);
 
+/* ------------------------------------------------------------------ tema - */
+/* Clar/fosc: per defecte segueix el sistema (@media al CSS, sense fer res
+   aqui — vegeu l'script al <head> que evita el flaix). El boto guarda una
+   tria explicita a localStorage, que sempre guanya. El canvas llegeix els
+   colors amb getComputedStyle en pintar (render.js: css()), aixi que un
+   canvi de tema nomes es veu si es torna a dibuixar — d'aqui els redraw(). */
+function effectiveTheme() {
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit === "light" || explicit === "dark") return explicit;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+$("themeToggle").addEventListener("click", () => {
+  const next = effectiveTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("gp:theme", next);
+  redraw();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  // nomes si l'usuari no ha triat res expressament — si ho ha fet, la seva
+  // tria mana per sobre del sistema.
+  if (!document.documentElement.hasAttribute("data-theme")) redraw();
+});
+
 /* --------------------------------------------------------------- arrenc -- */
 writeFields();
-loadPreset("garatge");
+loadPreset("buit");
 updateHud();
+refreshSavedList();
