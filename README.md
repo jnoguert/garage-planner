@@ -144,10 +144,13 @@ maniobres de cada cotxe (`summariseManeuvers` a `planner.js`): un tram per
 marxa, amb la distancia i cap a quin costat gira.
 
 En clicar un cotxe, el recorregut no es dibuixa nomes com una linia pel
-centre: es pinta tota l'AMPLADA del cotxe (una cinta, un quad per tram a
-`render.js` — un sol poligon amb tots els punts s'autointersecaria en fer
-marxa enrere), aixi es veu exactament per on passaria la carrosseria i no
-nomes per on aniria el seu punt mig.
+centre: es pinta l'empremta escombrada pel cotxe SENCER (L x W, morro i cul
+inclosos) — la unio del seu rectangle a cada pose. En girar, el morro
+escombra molt mes enfora que el punt mig, i es justament el que frega les
+cantonades; una cinta de l'amplada al voltant del centre no ho ensenyava.
+Tots els rectangles van a un sol path i s'omplen d'una tirada: amb un fill
+per pose, els centenars de rectangles superposats acumulen tinta fins a
+quedar opacs; amb un de sol, la regla "nonzero" els fusiona.
 
 Els cotxes amb diagnostic `blocked` tambe son clicables: ensenyen **en
 vermell** el recorregut que haurien fet si estiguessin sols i una creu al
@@ -155,8 +158,18 @@ primer punt on queden barrats per un altre cotxe (`diag[id].path` i
 `diag[id].hitAt`, que `checkDirection` calcula amb el MATEIX marge de
 seguretat de la comprovacio — amb marge 0 un recorregut que frega un cotxe
 a 5 cm amb marge 0,15 no marcava cap punt). El cotxe animat s'atura a la
-creu; la cinta segueix ensenyant el recorregut sencer, per veure si
+creu; l'empremta segueix ensenyant el recorregut sencer, per veure si
 l'hauria acabat fent.
+
+`blocked` nomes es diu quan s'ha comprovat. Abans n'hi havia prou amb "sol
+si, acompanyat no" per acusar els altres cotxes, i aixo no es el mateix:
+el cercador pot fallar amb mes obstacles al mapa encara que cap no li barri
+el pas (els bins de XYBIN/NTH col·lapsen poses diferents i en poden
+descartar una que feia falta despres). Ara `checkDirection` recorre el cami
+que faria sol pose a pose amb tots els altres aparcats; si no hi ha cap punt
+barrat, aquell cami JA ES una sortida valida (mateixa comprovacio que fa el
+cercador) i s'aprofita en comptes de donar el cotxe per atrapat. Es una
+xarxa de seguretat sobre una cerca incompleta, no la cura del bug 2.
 
 ### Dades de vehicles i el gir
 

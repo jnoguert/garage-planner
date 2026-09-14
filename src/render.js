@@ -367,23 +367,31 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     const v = specOf(cars.find((c) => c.id === play.id) || {});
     const hw = v.W / 2;
     const routeVar = play.fail ? "--red" : "--route";
-    const pts = play.path.map((p) => {
-      const cc = centreFromRear(p.x, p.y, p.th, v);
-      const nx = -Math.sin(p.th), ny = Math.cos(p.th);
-      return { cx: cc.cx, cy: cc.cy, lx: cc.cx + nx * hw, ly: cc.cy + ny * hw, rx: cc.cx - nx * hw, ry: cc.cy - ny * hw };
-    });
+    const pts = play.path.map((p) => centreFromRear(p.x, p.y, p.th, v));
 
-    // Cinta de l'amplada real del cotxe (no nomes el centre): un quad per
-    // tram, no un sol poligon amb tots els punts — un recorregut que gira
-    // sobre si mateix (marxa enrere) autointersecaria un poligon unic.
-    ctx.fillStyle = cssRgba(routeVar, .22);
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i];
-      ctx.beginPath();
-      ctx.moveTo(px(a.lx), py(a.ly)); ctx.lineTo(px(b.lx), py(b.ly));
-      ctx.lineTo(px(b.rx), py(b.ry)); ctx.lineTo(px(a.rx), py(a.ry));
-      ctx.closePath(); ctx.fill();
+    /* L'empremta escombrada: el cotxe SENCER (L x W, morro i cul inclosos),
+       no una cinta de l'amplada al voltant del centre — en girar, el morro
+       escombra molt mes enfora que el punt mig, i es justament el que frega
+       les cantonades. Es la unio del rectangle a cada pose.
+
+       Tots els rectangles van a UN sol path i s'omplen d'una tirada: amb un
+       fill per rectangle, els centenars de poses se superposen i la tinta
+       s'acumula fins a quedar opac. Amb un sol fill, la regla "nonzero" els
+       fusiona i la unio queda d'un to uniforme. */
+    ctx.fillStyle = cssRgba(routeVar, .16);
+    ctx.beginPath();
+    for (let i = 0; i < play.path.length; i++) {
+      const p = play.path[i], c = pts[i];
+      const co = Math.cos(p.th), si = Math.sin(p.th), hl = v.L / 2;
+      // cantonades: centre +- (hl al llarg) +- (hw de costat)
+      const ax = co * hl, ay = si * hl, bx = -si * hw, by = co * hw;
+      ctx.moveTo(px(c.cx + ax + bx), py(c.cy + ay + by));
+      ctx.lineTo(px(c.cx + ax - bx), py(c.cy + ay - by));
+      ctx.lineTo(px(c.cx - ax - bx), py(c.cy - ay - by));
+      ctx.lineTo(px(c.cx - ax + bx), py(c.cy - ay + by));
+      ctx.closePath();
     }
+    ctx.fill();
 
     ctx.strokeStyle = css(routeVar); ctx.lineWidth = Math.max(1.6, view.s * 0.09);
     ctx.globalAlpha = .85; ctx.beginPath();

@@ -56,8 +56,7 @@ function fit() { V.fitView(S.world); redraw(); }
 function statusOf(id) {
   if (!S.results) return null;
   if (S.results.stuck.includes(id)) {
-    const k = S.results.diag[id]?.kind;
-    return (k === "blocked" || k === "tight" || k === "budget") ? "amber" : "red";
+    return AMBER_KINDS.has(S.results.diag[id]?.kind) ? "amber" : "red";
   }
   return "ok";
 }

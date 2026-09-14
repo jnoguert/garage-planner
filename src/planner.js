@@ -319,32 +319,51 @@ async function checkDirection(world, cars, opts, goalType, onProgress) {
     if (res.ok) {
       out.push({ id: car.id, path: res.path, man: res.man, len: res.len, present: others });
     } else {
-      stuck.push(car.id);
       // Per diagnosticar per que: si tampoc hi cabria sol al recinte, no es
       // culpa dels altres cotxes — distingeix "el tapen" de "no hi ha espai".
       const v = specOf(car);
       const alone = obstaclesFor(world, cars, car.id, []);
       const resAlone = plan(world, car, alone, hf, v, opts, goalType);
       if (resAlone.ok) {
-        // "blocked": hi cabria sol. Guardem el recorregut que hauria fet i
-        // el primer punt on es queda barrat, perque la UI el pugui ensenyar
-        // en vermell en lloc de nomes dir-ho amb text.
+        // Sol hi cap. Abans aixo s'etiquetava directament com "el tapen els
+        // altres cotxes", pero aixo NO es comprovava enlloc: nomes es deduia
+        // de "sol si, acompanyat no". I no es el mateix. Recorrem el cami que
+        // faria sol mirant si algun cotxe l'hi barra de veritat.
         //
         // El marge es el mateix amb que s'ha fet la comprovacio (opts.margin),
         // no 0: el que decideix el veredicte no es nomes el toc fisic sino
-        // tambe passar-hi mes a prop del marge de seguretat demanat. Amb 0
-        // aqui, un recorregut que frega un cotxe a 5 cm amb marge 0,15
-        // no marcava cap punt i la creu no sortia mai.
+        // tambe passar-hi mes a prop del marge de seguretat demanat.
         let hitAt = null;
         for (const pose of resAlone.path) {
           if (!freeAt(world, withOthers, pose.x, pose.y, pose.th, v, opts.margin)) { hitAt = pose; break; }
         }
+        if (!hitAt) {
+          // Cap punt barrat: aquest mateix cami segueix essent valid amb tots
+          // els altres cotxes aparcats (mateixa comprovacio, pose a pose, que
+          // fa el cercador). O sigui que SI que pot sortir — el que ha passat
+          // es que el cercador no l'ha sabut retrobar amb mes obstacles al
+          // mapa (els bins de XYBIN/NTH col·lapsen poses diferents i en poden
+          // descartar una que feia falta despres). Abans aixo es reportava com
+          // "el tapen els altres cotxes", acusant un cotxe que no hi tenia res
+          // a veure; ara s'aprofita el cami, que ja el tenim a la ma i esta
+          // verificat. La cerca segueix essent incompleta (vegeu bug 2 al
+          // README): aixo es una xarxa de seguretat, no la cura.
+          out.push({ id: car.id, path: resAlone.path, man: resAlone.man, len: resAlone.len, present: others });
+          done++;
+          await onProgress?.(done / total);
+          continue;
+        }
+        stuck.push(car.id);
         diag[car.id] = { kind: "blocked", path: resAlone.path, hitAt };
       }
       else if (resAlone.reason === "start") {
+        stuck.push(car.id);
         const st = rearAxle(car, v);
         diag[car.id] = freeAt(world, alone, st.x, st.y, st.th, v, 0) ? { kind: "tight" } : { kind: "embedded" };
-      } else diag[car.id] = resAlone.reason === "budget" ? { kind: "budget" } : { kind: "geometry" };
+      } else {
+        stuck.push(car.id);
+        diag[car.id] = resAlone.reason === "budget" ? { kind: "budget" } : { kind: "geometry" };
+      }
     }
     done++;
     await onProgress?.(done / total);
