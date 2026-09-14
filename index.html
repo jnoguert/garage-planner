@@ -148,6 +148,7 @@ p.note{color:var(--ink-dim);font-size:12px;margin:8px 0 0}
 .ic{width:17px;height:17px;flex:none;color:var(--ink-dim);fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .tool[data-tool="exit"] .ic{color:var(--green)}
 .tool[data-tool="entrance"] .ic{color:var(--focus)}
+.tool[data-tool="gate"] .ic{color:var(--amber)}
 
 .row{display:flex;align-items:center;gap:9px;margin:7px 0}
 .row label{flex:1;font-size:12.5px;color:var(--ink-dim)}
@@ -276,6 +277,9 @@ details.caveats li{margin-bottom:7px}
     <button class="tool" data-tool="exit">
       <svg class="ic" viewBox="0 0 20 20"><path d="M7 3v14"/><path d="M9 10h8M13 6l4 4-4 4"/></svg>
       Sortida</button>
+    <button class="tool wide" data-tool="gate">
+      <svg class="ic" viewBox="0 0 20 20"><path d="M10 3v14"/><path d="M2 10h16"/><path d="M5 7 2 10l3 3M15 7l3 3-3 3"/></svg>
+      Entrada i sortida (un sol espai)</button>
     <button class="tool" data-tool="car">
       <svg class="ic" viewBox="0 0 20 20"><rect x="3" y="6" width="14" height="8" rx="3"/><path d="M7 6.5v7M13 6.5v7"/></svg>
       Cotxe</button>
@@ -287,7 +291,7 @@ details.caveats li{margin-bottom:7px}
     <input type="range" id="brush" min="10" max="300" step="10" value="100"><span class="val" id="brushVal">100 cm</span></div>
   <div class="row"><label for="angle">Angle del cotxe</label>
     <input type="range" id="angle" min="0" max="345" step="15" value="270"><span class="val" id="angleVal">270°</span></div>
-  <p class="note">Arrossega per pintar amb l'eina triada; amb la Goma esborres qualsevol element (mur, plaça, entrada, sortida o cotxe) sota el cursor. Amb l'eina Línia recta: arrossega des d'on vols l'extrem fix — es queda horitzontal o vertical segons cap a on arrossegues mes. Fes doble clic sobre la mesura en metres d'una línia per canviar-ne la llargada mantenint fix l'extrem d'inici. Amb l'eina Cotxe: tria primer l'angle (llisquet o tecles R/E) — el fantasma el mostra — i clica per plantar-lo ja orientat. Per reorientar-ne un ja plantat, torna-hi a clicar i arrossega. Supr per esborrar el seleccionat.</p>
+  <p class="note">Arrossega per pintar amb l'eina triada; amb la Goma esborres qualsevol element (mur, plaça, entrada, sortida o cotxe) sota el cursor. "Entrada i sortida" pinta un sol espai que fa de tots dos alhora — fes-ho servir si a la teva planta real hi ha una unica porta que s'usa en tots dos sentits, en comptes d'una entrada i una sortida separades. Amb l'eina Línia recta: arrossega des d'on vols l'extrem fix — es queda horitzontal o vertical segons cap a on arrossegues mes. Fes doble clic sobre la mesura en metres d'una línia per canviar-ne la llargada mantenint fix l'extrem d'inici. Amb l'eina Cotxe: tria primer l'angle (llisquet o tecles R/E) — el fantasma el mostra — i clica per plantar-lo ja orientat. Per reorientar-ne un ja plantat, torna-hi a clicar i arrossega. Supr per esborrar el seleccionat.</p>
 
   <h2>Plantes d'exemple</h2>
   <div class="btn-row">

@@ -1,11 +1,11 @@
-/* Els dos bugs que ja hem trobat, convertits en tests.
+/* Els bugs que ja hem trobat, convertits en tests.
 
    Qualsevol canvi futur al planificador o a la col·lisio ha de passar per aqui
    abans de donar-se per bo. */
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { presets } from "../src/scene.js";
+import { presets, newWorldM, fillRectM, makeCars, ASPH } from "../src/scene.js";
 import { VOID, EXIT, CELL, idx, inBounds } from "../src/geometry.js";
 import { specOf } from "../src/vehicle.js";
 import { exitField, obstaclesFor, plan, evacuate } from "../src/planner.js";
@@ -145,4 +145,35 @@ for (const name of ["garatge", "garatge3", "tandem"]) {
 test("bug 2: monotonia a \"estret\" (BUG OBERT, encara falla)", { todo: "la resolucio mes fina ho va reduir pero no ho va eliminar; vegeu el comentari" }, () => {
   const v = violacionsDeMonotonia("estret");
   assert.deepEqual(v, [], `monotonia trencada:\n  ${v.join("\n  ")}`);
+});
+
+/* ================================================================ BUG 3 ====
+   Una zona d'entrada/sortida mes prima que STEP (0,22 m) en la direccio
+   d'avanc quedava "saltada per sobre": el cotxe hi passaria fisicament
+   (cap col·lisio, cap paret), pero el pas discret ateria just abans i el
+   seguent just despres, sense que cap dels dos caigues a dins de la zona
+   objectiu — plan() acabava en "noroute" tot i que un recorregut recte i
+   trivial existia.
+
+   Reproduit amb una sala oberta i una franja EXIT de nomes 0,1-0,15 m de
+   fondaria enmig del pas: fallava sempre abans del fix, ara hi arriba amb
+   un nombre d'expansions estable (no varia amb la fondaria, senyal que ja
+   no depen de si un aterratge "cau be" o no).
+
+   Fix: subGoalPose() (planner.js) comprova, per a cada tram candidat, si
+   l'ARC hi passa per sobre en algun dels 4 sub-punts — no nomes si
+   l'aterratge final hi cau a dins — nomes quan l'heuristica ja diu que
+   som a prop (hh < STEP*1,5), perque cridar-ho sempre multiplicava per 4
+   el temps de cerca sencer sense guanyar res la immensa majoria de cops
+   que no hi ha cap zona objectiu a prop. */
+test("bug 3: una zona d'entrada/sortida mes prima que STEP no queda saltada", async () => {
+  for (const depth of [0.1, 0.15, 0.2]) {
+    const world = newWorldM(20, 10);
+    fillRectM(world, 0, 0, 20, 10, ASPH);
+    fillRectM(world, 10, 4, 10 + depth, 6, EXIT);   // franja prima enmig de l'obert
+    const cars = makeCars();
+    cars.addM(2.5, 5.0, 0, 1);
+    const res = await evacuate(world, cars, OPTS);
+    assert.equal(res.out.length, 1, `fondaria ${depth}m: hauria de trobar un recorregut recte i trivial`);
+  }
 });

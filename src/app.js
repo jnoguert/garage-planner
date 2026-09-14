@@ -1,7 +1,7 @@
 /* Cablejat del DOM: events, panells, HUD, animacio de resultats. Cap logica
    de motor viu aqui — nomes crida als moduls i pinta el que retornen. */
 
-import { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL } from "./geometry.js";
+import { VOID, ASPH, SPOT, EXIT, ENTRANCE, GATE, CELL } from "./geometry.js";
 import {
   newWorld, setCell, resize as resizeWorld, hasExit, hasEntrance, makeCars, presets,
   addLine, setLineLength, lineLength, lineMidpoint,
@@ -63,7 +63,7 @@ function statusOf(id) {
 }
 
 /* --------------------------------------------------------------- pintura -- */
-const MATERIAL = { asphalt: ASPH, spot: SPOT, wall: VOID, entrance: ENTRANCE, exit: EXIT };
+const MATERIAL = { asphalt: ASPH, spot: SPOT, wall: VOID, entrance: ENTRANCE, exit: EXIT, gate: GATE };
 function paintAt(p, forceType) {
   const type = forceType ?? MATERIAL[S.tool];
   if (type === undefined) return;

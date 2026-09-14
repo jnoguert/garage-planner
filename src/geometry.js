@@ -5,12 +5,15 @@
    i els segments de paret exactes. Les dues fonts de mur conviuen — el
    planificador no sap quina ve d'on. */
 
-export const VOID = 0, ASPH = 1, SPOT = 2, EXIT = 3, ENTRANCE = 4;
+export const VOID = 0, ASPH = 1, SPOT = 2, EXIT = 3, ENTRANCE = 4, GATE = 5;
 export const CELL = 0.1;                    // metres per cel·la de dibuix
 
-/* ENTRANCE es nomes informatiu: per al planificador i per exitField() es
-   transitable exactament com ASPH/SPOT (tot el que no es VOID ni EXIT es
-   "terra"). No cal cap comprovacio especial enlloc mes. */
+/* ENTRANCE i EXIT son nomes informatius per a la col·lisio: per al
+   planificador i per exitField() son transitables exactament com ASPH/SPOT
+   (tot el que no es VOID es "terra"). GATE es un unic espai que fa de
+   sortida I d'entrada alhora (per exemple una sola porta de garatge que
+   s'usa en tots dos sentits) — planner.js el tracta com a objectiu valid
+   tant si es busca EXIT com si es busca ENTRANCE, vegeu isGoalCell(). */
 
 export const idx = (world, c, r) => r * world.cols + c;
 export const inBounds = (world, c, r) => c >= 0 && r >= 0 && c < world.cols && r < world.rows;

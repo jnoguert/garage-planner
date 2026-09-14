@@ -2,10 +2,15 @@
    parametre, i per aixo es pot provar amb Node sense navegador. */
 
 import {
-  VOID, EXIT, ENTRANCE, CELL, idx, inBounds,
+  VOID, EXIT, ENTRANCE, GATE, CELL, idx, inBounds,
   segHitsOBB, cellHitsOBB, obbHitsOBB, wallField, MinHeap,
 } from "./geometry.js";
 import { specOf } from "./vehicle.js";
+
+/* GATE val per EXIT i per ENTRANCE alhora (una sola porta que s'usa en
+   tots dos sentits) — a tot arreu on es compara una cel·la contra
+   `goalType`/`targetType`, cal acceptar tambe GATE. */
+function isGoalCell(cellValue, goalType) { return cellValue === goalType || cellValue === GATE; }
 
 export const NTH = 36;          // sectors d'orientacio (10 graus)
 export const XYBIN = 0.15;      // resolucio de la cerca en planta (m)
@@ -109,7 +114,7 @@ export function exitField(world, targetType = EXIT, stats) {
   const N = cols * rows;
   const d = new Float64Array(N).fill(Infinity);
   const pq = new MinHeap();
-  for (let i = 0; i < N; i++) if (grid[i] === targetType) { d[i] = 0; pq.push(0, i); }
+  for (let i = 0; i < N; i++) if (isGoalCell(grid[i], targetType)) { d[i] = 0; pq.push(0, i); }
   const D8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
               [1, 1, 1.4142], [1, -1, 1.4142], [-1, 1, 1.4142], [-1, -1, 1.4142]];
   let pops = 0;
@@ -135,6 +140,40 @@ export function exitField(world, targetType = EXIT, stats) {
 }
 
 /* --------------------------------------------------------- planificador --- */
+
+/* Pose despres de recorrer `armLen` metres d'arc amb aquest angle de volant
+   `st` (0 = recte) i marxa `dir`, des de (cx,cy,cth). Es la mateixa formula
+   que el pas principal de plan(), pero parametritzada per longitud d'arc
+   perque tambe serveix per als sub-punts de subGoalPose() mes avall. */
+function stepPose(cx, cy, cth, dir, st, armLen, v) {
+  if (Math.abs(st) < 1e-6) return { x: cx + dir * armLen * Math.cos(cth), y: cy + dir * armLen * Math.sin(cth), th: cth };
+  const R = v.B / Math.tan(st);
+  const dth = dir * armLen / R;
+  const nth = cth + dth;
+  return { x: cx - R * Math.sin(cth) + R * Math.sin(nth), y: cy + R * Math.cos(cth) - R * Math.cos(nth), th: nth };
+}
+
+/* Si l'arc de (cx,cy,cth) fins al pas sencer (STEP) travessa una cel·la de
+   `goalType` en algun punt — inclos el pas sencer mateix (k=4), aixi ja no
+   cal cap comprovacio d'aterratge per separat — evita que una zona
+   d'entrada/sortida mes prima que STEP (0,22 m) quedi "saltada per sobre":
+   el cotxe hi passaria fisicament pero cap dels dos extrems del salt
+   discret cauria a dins. Mesurat: amb una sortida ampla pero de nomes
+   0,1-0,2 m de fondaria en la direccio d'avanc, plan() fallava (noroute)
+   tot i ser trivialment recte — amb aquesta comprovacio hi arriba.
+   4 sub-punts es prou fi per a qualsevol cosa dibuixable (la cel·la mes
+   petita ja es de 0,1 m). Cada sub-punt es valida amb freeAt() tambe: no
+   n'hi ha prou que el pas sencer sigui lliure als dos extrems, un punt
+   intermedi podria no ser-ho en una geometria prou estranya. */
+function subGoalPose(world, obs, cx, cy, cth, dir, st, v, margin, goalType) {
+  for (let k = 1; k <= 4; k++) {
+    const sp = stepPose(cx, cy, cth, dir, st, STEP * (k / 4), v);
+    if (!freeAt(world, obs, sp.x, sp.y, sp.th, v, margin)) continue;
+    const c = centreFromRear(sp.x, sp.y, sp.th, v);
+    if (isGoalCell(cellTypeAt(world, c.cx, c.cy), goalType)) return sp;
+  }
+  return null;
+}
 
 /* Hybrid A* sobre (x, y, angle) amb marxa endavant i enrere, des de la
    posicio actual del cotxe fins a qualsevol cel·la de `goalType` (EXIT per
@@ -183,36 +222,47 @@ export function plan(world, car, obs, hf, v, opts, goalType = EXIT) {
     const kk = key(cx, cy, cth);
     if (kk >= 0 && cg > closed[kk] + 1e-6) continue;
     const ctr = centreFromRear(cx, cy, cth, v);
-    if (cellTypeAt(world, ctr.cx, ctr.cy) === goalType) { goal = cur; break; }
+    if (isGoalCell(cellTypeAt(world, ctr.cx, ctr.cy), goalType)) { goal = cur; break; }
     if (++expanded > MAX_EXPAND) return { ok: false, reason: "budget", expanded };
 
     for (const dir of dirs) {
       for (const st of steers) {
-        let nxp, nyp, nth;
-        if (Math.abs(st) < 1e-6) {
-          nxp = cx + dir * STEP * Math.cos(cth); nyp = cy + dir * STEP * Math.sin(cth); nth = cth;
-        } else {
-          const R = v.B / Math.tan(st);
-          const dth = dir * STEP / R;
-          nth = cth + dth;
-          nxp = cx - R * Math.sin(cth) + R * Math.sin(nth);
-          nyp = cy + R * Math.cos(cth) - R * Math.cos(nth);
-        }
+        const { x: nxp, y: nyp, th: nth } = stepPose(cx, cy, cth, dir, st, STEP, v);
         if (!freeAt(world, obs, nxp, nyp, nth, v, opts.margin)) continue;
         const gear = (DIR[cur] !== 0 && DIR[cur] !== dir) ? 1 : 0;
         const man = MAN[cur] + gear;
         if (man > opts.maxMan) continue;
+        const hh = hAt(nxp, nyp);
+        if (!isFinite(hh)) continue;
+
+        // El tram sencer es lliure (acabem de comprovar-ho): si l'aterratge
+        // ja es a prop del objectiu (heuristica < 1,5 STEP — nomes aixo, no
+        // cada expansio: subGoalPose fa fins a 4 freeAt() mes i cridar-ho
+        // sempre multiplicava per 4 el temps de cerca sencer), mira si en
+        // algun punt del tram (l'aterratge inclos) arriba a `goalType` —
+        // vegeu subGoalPose per que cal mirar tot el tram i no nomes l'extrem.
+        if (hh < STEP * 1.5) {
+          const sub = subGoalPose(world, obs, cx, cy, cth, dir, st, v, opts.margin, goalType);
+          if (sub) {
+            const subLen = Math.hypot(sub.x - cx, sub.y - cy);
+            X.push(sub.x); Y.push(sub.y); T.push(sub.th);
+            G.push(cg + subLen + (dir < 0 ? subLen * REV_COST : 0) + gear * GEAR_COST);
+            P.push(cur); DIR.push(dir); MAN.push(man);
+            goal = X.length - 1; break;
+          }
+        }
+
         const ng = cg + STEP + (dir < 0 ? STEP * REV_COST : 0) + gear * GEAR_COST;
         const nk = key(nxp, nyp, nth);
         if (nk < 0) continue;
         if (ng >= closed[nk] - 1e-6) continue;
-        const hh = hAt(nxp, nyp);
-        if (!isFinite(hh)) continue;
         closed[nk] = ng;
         X.push(nxp); Y.push(nyp); T.push(nth); G.push(ng); P.push(cur); DIR.push(dir); MAN.push(man);
         open.push(ng + hh * 0.9, X.length - 1);
       }
+      if (goal >= 0) break;
     }
+    if (goal >= 0) break;
   }
   if (goal < 0) return { ok: false, reason: "noroute", expanded };
   const path = [];

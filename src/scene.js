@@ -4,9 +4,9 @@
    necessita saber del mon. `_wall` es la memoria cau del camp de distancies als
    murs; tot el que toca el dibuix la buida amb touch(). */
 
-import { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL, mkSeg, idx, inBounds } from "./geometry.js";
+import { VOID, ASPH, SPOT, EXIT, ENTRANCE, GATE, CELL, mkSeg, idx, inBounds } from "./geometry.js";
 
-export { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL };
+export { VOID, ASPH, SPOT, EXIT, ENTRANCE, GATE, CELL };
 
 export function newWorld(cols, rows) {
   return { cols, rows, grid: new Uint8Array(cols * rows).fill(VOID), segs: [], lines: [], _wall: null };
@@ -52,8 +52,10 @@ export function resize(world, cols, rows) {
   return world;
 }
 
-export function hasExit(world) { return world.grid.includes(EXIT); }
-export function hasEntrance(world) { return world.grid.includes(ENTRANCE); }
+/* GATE compta per a tots dos: una sola porta que serveix d'entrada i de
+   sortida alhora (vegeu isGoalCell() a planner.js). */
+export function hasExit(world) { return world.grid.includes(EXIT) || world.grid.includes(GATE); }
+export function hasEntrance(world) { return world.grid.includes(ENTRANCE) || world.grid.includes(GATE); }
 
 /* --------------------------------------------------------------- linies -- */
 /* Línies rectes ortonormals (horitzontals o verticals) dibuixades amb
@@ -161,8 +163,7 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 7.0, 270, GENERIC);
       ac(cars, 7.5 + i * 5, 29.0, 90, GENERIC);
     }
-    fr(world, 0, 16, 2, 21, EXIT);
-    fr(world, 0, 22, 2, 27, ENTRANCE);   // mateixa paret, just al costat de la sortida
+    fr(world, 0, 16, 2, 27, GATE);        // entrada i sortida combinades, un sol espai
     return { world, cars, veh: GENERIC };
   },
 
@@ -170,8 +171,7 @@ export const presets = {
   tandem() {
     const world = nw(40, 34), cars = makeCars();
     fr(world, 0, 0, 39, 33, ASPH);
-    fr(world, 2, 0, 8, 1, EXIT);
-    fr(world, 9, 0, 15, 1, ENTRANCE);    // mateixa paret, just al costat de la sortida
+    fr(world, 2, 0, 15, 1, GATE);         // entrada i sortida combinades, un sol espai
     for (let i = 0; i < 4; i++) {
       fr(world, 3 + i * 9, 24, 7 + i * 9, 33, SPOT);
       ac(cars, 5.5 + i * 9, 29.0, 90, GENERIC);
@@ -191,8 +191,7 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 5.0, 270, GENERIC);
       ac(cars, 7.5 + i * 5, 24.0, 90, GENERIC);
     }
-    fr(world, 0, 12, 2, 16, EXIT);
-    fr(world, 0, 17, 2, 21, ENTRANCE);   // mateixa paret, just al costat de la sortida
+    fr(world, 0, 12, 2, 21, GATE);        // entrada i sortida combinades, un sol espai
     return { world, cars, veh: GENERIC };
   },
 
@@ -210,8 +209,7 @@ export const presets = {
     fr(world, 0, 0, 39, 8, ASPH);      // brac superior, y 0-4,15
     fr(world, 0, 8, 15, 16, ASPH);     // bloc esquerre, y 4,15-8,01
     fr(world, 39, 0, 53, 8, ASPH);     // repla exterior (fora de la porta)
-    fr(world, 41, 0, 42, 8, EXIT);     // fora del tot, passat el llindar
-    fr(world, 43, 0, 44, 8, ENTRANCE); // mateix llindar, just al costat de la sortida
+    fr(world, 41, 0, 44, 8, GATE);      // entrada i sortida combinades, fora del tot
     const W = 19.70, D1 = 4.15, D2 = 8.01, LX = 7.65;
     world.segs = [
       mkSeg(0, 0, W, 0), mkSeg(W, D1, LX, D1), mkSeg(LX, D1, LX, D2),
@@ -240,8 +238,7 @@ export const presets = {
   buit() {
     const world = nw(60, 36), cars = makeCars();
     fr(world, 3, 2, 57, 33, ASPH);
-    fr(world, 0, 16, 2, 21, EXIT);
-    fr(world, 0, 22, 2, 27, ENTRANCE);   // mateixa paret, just al costat de la sortida
+    fr(world, 0, 16, 2, 27, GATE);        // entrada i sortida combinades, un sol espai
     return { world, cars, veh: GENERIC };
   },
 };

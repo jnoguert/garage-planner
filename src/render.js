@@ -4,7 +4,7 @@
    El "terra" no es dibuixa com una textura decorativa: la calçada/plaça/
    sortida ja marquen l'espai, i el que hi ha fora es simplement fons. */
 
-import { VOID, SPOT, EXIT, ENTRANCE, CELL, idx, inBounds } from "./geometry.js";
+import { VOID, SPOT, EXIT, ENTRANCE, GATE, CELL, idx, inBounds } from "./geometry.js";
 import { centreFromRear } from "./planner.js";
 import { specOf } from "./vehicle.js";
 
@@ -170,19 +170,20 @@ function wallBoundaryRuns(world, minLen) {
   return runs;
 }
 
-/* Amplada neta de cada obertura d'entrada dibuixada: component connex de
-   cel·les ENTRANCE, amplada = el costat curt del seu requadre englobant. Es
-   la mesura de seguretat real (l'entrada es un forat en un mur — vegeu
-   test/entrance.test.js: si es massa estreta, el cotxe hi toca els
-   brancals igual que a qualsevol altre pas). Diferent de wallBoundaryRuns:
-   aquella etiqueta la llargada dels trams de MUR, no l'amplada del buit. */
-function entranceOpenings(world, minLen) {
+/* Amplada neta de cada obertura d'entrada (o entrada+sortida combinada, GATE)
+   dibuixada: component connex de cel·les de `matchType`, amplada = el costat
+   curt del seu requadre englobant. Es la mesura de seguretat real (l'entrada
+   es un forat en un mur — vegeu test/entrance.test.js: si es massa estreta,
+   el cotxe hi toca els brancals igual que a qualsevol altre pas). Diferent
+   de wallBoundaryRuns: aquella etiqueta la llargada dels trams de MUR, no
+   l'amplada del buit. */
+function entranceOpenings(world, minLen, matchType) {
   const { cols, rows, grid } = world;
   const seen = new Uint8Array(cols * rows);
   const openings = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const i0 = idx(world, c, r);
-    if (grid[i0] !== ENTRANCE || seen[i0]) continue;
+    if (grid[i0] !== matchType || seen[i0]) continue;
     let minC = c, maxC = c, minR = r, maxR = r;
     const stack = [i0]; seen[i0] = 1;
     while (stack.length) {
@@ -194,7 +195,7 @@ function entranceOpenings(world, minLen) {
         const nc = cc + dc, nr = cr + dr;
         if (!inBounds(world, nc, nr)) continue;
         const ni = idx(world, nc, nr);
-        if (grid[ni] === ENTRANCE && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
+        if (grid[ni] === matchType && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
       }
     }
     const wM = (maxC - minC + 1) * CELL, hM = (maxR - minR + 1) * CELL;
@@ -236,7 +237,8 @@ function drawDimensions(V, world) {
   }
 
   ctx.font = `600 ${Math.max(9, s * 0.24)}px "Barlow",sans-serif`;
-  for (const o of entranceOpenings(world, minLen)) {
+  const openings = [...entranceOpenings(world, minLen, ENTRANCE), ...entranceOpenings(world, minLen, GATE)];
+  for (const o of openings) {
     const label = "↔ " + o.width.toFixed(2) + " m";
     const tw = ctx.measureText(label).width;
     const tx = px(o.cx) + (o.horiz ? 0 : s * 0.5), ty = py(o.cy) + (o.horiz ? s * 0.34 : 0);
@@ -271,7 +273,8 @@ function buildStaticLayer(world, view) {
     const t = world.grid[idx(world, c, r)];
     if (t === VOID) continue;
     ctx.fillStyle = t === SPOT ? css("--asphalt-lit") : t === EXIT ? cssRgba("--green", .30)
-                  : t === ENTRANCE ? cssRgba("--focus", .22) : css("--asphalt");
+                  : t === ENTRANCE ? cssRgba("--focus", .22) : t === GATE ? cssRgba("--amber", .28)
+                  : css("--asphalt");
     ctx.fillRect(px(c * CELL), py(r * CELL), cs + .6, cs + .6);
   }
 
@@ -309,6 +312,13 @@ function buildStaticLayer(world, view) {
   ctx.fillStyle = css("--focus");
   for (let r = 0; r < world.rows; r++) for (let c = 0; c < world.cols; c++) {
     if (world.grid[idx(world, c, r)] !== ENTRANCE) continue;
+    if (((c + r) & 1) === 0) continue;
+    const x = px(c * CELL) + cs * 0.5, y = py(r * CELL) + cs * 0.5, k = cs * 0.28;
+    ctx.beginPath(); ctx.arc(x, y, k, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = css("--amber");
+  for (let r = 0; r < world.rows; r++) for (let c = 0; c < world.cols; c++) {
+    if (world.grid[idx(world, c, r)] !== GATE) continue;
     if (((c + r) & 1) === 0) continue;
     const x = px(c * CELL) + cs * 0.5, y = py(r * CELL) + cs * 0.5, k = cs * 0.28;
     ctx.beginPath(); ctx.arc(x, y, k, 0, 7); ctx.fill();

@@ -25,7 +25,7 @@ npm test
 ```
 
 `node --test`, sense framework ni dependencies. Uns 56 tests en ~3 s,
-inclosos dos de regressio per als bugs reals que hem trobat al planificador
+inclosos tres de regressio per a bugs reals que hem trobat al planificador
 (vegeu `test/planner-regression.test.js`):
 
 - **Precisio de coma flotant**: el camp de distancies a la sortida i el
@@ -35,11 +35,19 @@ inclosos dos de regressio per als bugs reals que hem trobat al planificador
 - **Monotonia del marge de seguretat**: un marge mes gran no pot facilitar
   mai la sortida — si es dona el cas, es sempre un bug del cercador (la
   discretitzacio de l'espai x/y/angle), mai de la geometria.
+- **Zones d'entrada/sortida mes primes que un pas d'arc (STEP=0,22 m)**: el
+  cotxe hi passava fisicament pero el cercador saltava per sobre sense
+  aterrar-hi mai a dins de cap dels dos costats del salt. `plan()` ara
+  comprova (`subGoalPose`, nomes quan l'heuristica ja diu que som a prop, per
+  no multiplicar per 4 el temps de cerca sencer) si el TRAM sencer hi passa
+  per sobre, no nomes l'aterratge final.
 
 Un test queda marcat `todo` a proposit: la resolucio de cerca actual
 (bins de 0,15 m, 36 sectors, 7 angles de direccio) va reduir molt la
-no-monotonia pero no la va eliminar del tot al preset "estret". Es un bug
-obert, documentat en comptes d'amagat.
+no-monotonia pero no la va eliminar del tot al preset "estret" — i pot
+aparèixer en qualsevol altre preset o planta si l'atzar de la geometria hi
+cau just al mig (es el mateix mecanisme, no un bug nou). Es un bug obert,
+documentat en comptes d'amagat.
 
 ## Estructura
 
@@ -105,6 +113,12 @@ els cotxes aparcats, cadascun a la seva plaça — vegeu la seccio seguent):
   accessible si pot fer les dues coses; si en falla nomes una, es
   diagnostica cada sentit per separat (un cotxe pot entrar-hi be i quedar
   tapat nomes en sortir, o al reves).
+
+Si a la teva planta real hi ha una unica porta que fas servir en tots dos
+sentits, l'eina "Entrada i sortida" (`GATE` a `geometry.js`) pinta un sol
+espai que compta com a EXIT i com a ENTRANCE alhora (`isGoalCell()` a
+`planner.js`), en lloc de dues zones separades. Els 4 presets d'exemple
+amb cotxes (bateria/tandem/estret/buit) ja l'usen.
 
 ### Garatges desats i tema
 
