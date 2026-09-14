@@ -15,15 +15,23 @@ import { specOf } from "../src/vehicle.js";
 
 const OPTS = { margin: 0.15, maxMan: 14, allowRev: true };
 
-/* --------------------------------------------------------------- rondes --- */
-/* "tandem" (vegeu scene.js) te un cotxe tapat pels altres: surt a la ronda 2,
-   no a la 1 — confirmat contra la linia base a presets.test.js. */
-test("evacuacio per rondes: un cotxe tapat surt en una ronda posterior", async () => {
+/* -------------------------------------------------- comprovacio independent */
+/* "tandem" (vegeu scene.js): quatre places al fons (ids 1-4) i dos cotxes
+   aparcats al davant (ids 5,6), just al camí dels del mig (2 i 3) — no dels
+   de les puntes (1 i 4, que hi tenen via lliure de costat). evacuate() no
+   suposa mai que 5 o 6 ja han marxat: amb tots aparcats on son, 2 i 3
+   queden "blocked" (hi cabrien sols, pero els tapen 5/6), mentre que 1, 4,
+   5 i 6 surten igualment. Cap cotxe "surt" nomes perque un altre s'hagi
+   tret abans del mig. */
+test("evacuacio: cada cotxe es comprova amb tots els altres aparcats, no en suposa cap fora", async () => {
   const { world, cars } = presets.tandem();
   const r = await evacuate(world, cars, OPTS);
-  assert.equal(r.out.length, cars.length, "tots haurien de sortir");
-  assert.equal(r.stuck.length, 0);
-  assert.ok(r.out.some((o) => o.round > 1), "algun cotxe hauria de sortir despres de la ronda 1");
+  const idAt = (i) => cars[i].id;
+  assert.deepEqual(new Set(r.out.map((o) => o.id)), new Set([idAt(0), idAt(3), idAt(4), idAt(5)]),
+    "1, 4, 5 i 6 (index 0,3,4,5) haurien de sortir, tapats per ningu");
+  assert.deepEqual(new Set(r.stuck), new Set([idAt(1), idAt(2)]),
+    "2 i 3 (index 1,2) haurien de quedar blocked: els tapen 5 i 6, aparcats just al davant");
+  for (const id of r.stuck) assert.equal(r.diag[id]?.kind, "blocked", `cotxe ${id}: hi cabria sol, nomes el tapen`);
 });
 
 /* ------------------------------------------------------------- embedded --- */

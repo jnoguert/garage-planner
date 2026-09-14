@@ -2,15 +2,18 @@
 
    Originalment baseline.json es va generar executant el motor del prototip
    original (legacy/legacy-engine.html, L217-576) — provava que la migracio a
-   moduls no havia canviat res. Des que la resolucio de dibuix va pujar de
-   0,5 m a 0,1 m (CELL a src/geometry.js) aquesta comparacio ja no te sentit:
-   es un canvi de comportament deliberat, no un bug de migracio, i els
-   numeros exactes (llargada de recorregut, alguna maniobra) es mouen amb la
-   graella mes fina. baseline.json es va regenerar executant EL MOTOR ACTUAL
-   contra si mateix, i ara fa de linia de regressio cap al futur: si un canvi
-   al planificador o a la col·lisio mou algun d'aquests numeros, aquest test
-   ho ha de dir — i llavors cal decidir si el canvi era intencionat i
-   regenerar la linia base, o si era un bug. */
+   moduls no havia canviat res. Des de llavors ha canviat dues vegades de
+   proposit, cada cop per un canvi de comportament deliberat, no un bug de
+   migracio: la resolucio de dibuix (0,5m -> 0,1m) i, mes recentment,
+   evacuate() — abans evacuava "per rondes" (un cotxe podia sortir nomes
+   perque se suposava que un altre ja havia marxat abans); ara cada cotxe es
+   comprova independent, amb tots els altres aparcats exactament on son (cap
+   ordre de sortida donat per suposat). Vegeu el comentari d'evacuate() a
+   planner.js. baseline.json es regenera executant EL MOTOR ACTUAL contra si
+   mateix, i fa de linia de regressio cap al futur: si un canvi al
+   planificador o a la col·lisio mou algun d'aquests numeros, aquest test ho
+   ha de dir — i llavors cal decidir si el canvi era intencionat i regenerar
+   la linia base, o si era un bug. */
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -42,7 +45,6 @@ for (const name of Object.keys(baseline).filter((k) => !k.startsWith("_"))) {
 
       if (want.ok) {
         assert.ok(got, `${on}: hauria de sortir i no surt`);
-        assert.equal(got.round, want.round, `${on}: ronda`);
         assert.equal(got.man, want.man, `${on}: maniobres`);
         assert.equal(+got.len.toFixed(2), want.len, `${on}: llargada del recorregut`);
       } else {

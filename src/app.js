@@ -328,13 +328,13 @@ function renderResults() {
     li.innerHTML = `<button class="res" data-id="${o.id}">
       <span class="dot" style="background:var(--green)"></span>
       <span><span class="name">${label(o.id)}</span>
-      <span class="why">Surt a la tanda ${o.round} · ${o.man} maniobre${o.man === 1 ? "" : "s"} · ${o.len.toFixed(1)} m</span></span>
+      <span class="why">${o.man} maniobre${o.man === 1 ? "" : "s"} · ${o.len.toFixed(1)} m</span></span>
       <span class="num">▶</span></button>
       <ol class="maneuvers">${maneuverList(o.path)}</ol>`;
     ul.appendChild(li);
   }
   const why = {
-    blocked: "Tapat per altres cotxes que tampoc no poden sortir",
+    blocked: "Hi cabria sol, pero altres cotxes aparcats el tapen",
     geometry: "No hi ha prou espai per maniobrar, ni tot sol",
     embedded: "No hi cap: a la plaça ja toca un mur o un altre cotxe",
     tight: "Hi cap justet, pero no amb el marge de seguretat actual",

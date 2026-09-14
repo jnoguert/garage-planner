@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { presets } from "../src/scene.js";
 import { VOID, CELL, idx, inBounds } from "../src/geometry.js";
 import { specOf } from "../src/vehicle.js";
-import { exitField, obstaclesFor, plan, evacuate, MAX_EXPAND } from "../src/planner.js";
+import { exitField, obstaclesFor, plan, evacuate } from "../src/planner.js";
 
 const OPTS = { margin: 0.15, maxMan: 14, allowRev: true };
 const D8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
@@ -71,12 +71,16 @@ for (const name of ["bateria", "estret", "tandem"]) {
    preset "tandem", amb Float32Array en surten 3 de 6 en comptes de 5 de 6.
    Mesurat. Per tant el que el guarda es el resultat, no el comptador. */
 test("bug 1: el closed set no degrada el resultat (tandem)", async () => {
+  // tandem te 2 cotxes (dels 6) genuinament "blocked" — els tapen uns altres
+  // aparcats al davant, no es cap fallada de cerca (vegeu evacuation.test.js).
+  // Amb el closed set en float32 aquest resultat es degradava de debo: menys
+  // cotxes sortien i els "blocked" passaven a "geometry"/"budget" (la cerca,
+  // no la geometria, fallava). Aixo es el que aquest test vigila.
   const { world, cars } = presets.tandem();
   const r = await evacuate(world, cars, OPTS);
-  assert.equal(r.stuck.length, 0, "tandem ha de treure els 6 cotxes");
-  for (const o of r.out) {
-    assert.ok(o.expanded === undefined || o.expanded < MAX_EXPAND, "pressupost exhaurit");
-  }
+  assert.equal(r.out.length, 4, "tandem ha de treure 4 dels 6 cotxes");
+  assert.equal(r.stuck.length, 2, "els altres 2 haurien de quedar blocked, no perduts per la cerca");
+  for (const id of r.stuck) assert.equal(r.diag[id]?.kind, "blocked", `cotxe ${id}: hauria de ser "blocked", no una fallada de cerca`);
 });
 
 /* ================================================================ BUG 2 ====

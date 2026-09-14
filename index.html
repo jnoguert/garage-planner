@@ -335,13 +335,13 @@ details.caveats li{margin-bottom:7px}
     <summary>Què comprova i què no</summary>
     <ul>
       <li>Cada cotxe es modela com un rectangle amb direcció a les rodes davanteres (model de bicicleta cinemàtica). La trajectòria de sortida es busca amb maniobres endavant i enrere; si no n'hi ha cap de vàlida, el cotxe queda marcat.</li>
-      <li>Els cotxes surten <b>d'un en un</b> i en l'ordre que el simulador troba. No es comprova el trànsit simultani, les cues, els encreuaments ni les preferències de pas.</li>
+      <li>Cada cotxe es comprova <b>de manera independent</b>, amb tots els altres aparcats exactament on són ara: mai se suposa que algun altre ja ha marxat per fer-li lloc. Si un cotxe només podria sortir després que un altre es tregués primer, aquest cotxe queda marcat com a sense sortida (tapat), encara que aquell altre sí que pugui sortir. No es comprova el trànsit simultani, les cues, els encreuaments ni les preferències de pas.</li>
       <li>La col·lisió és exacta: rectangle contra rectangle per als cotxes i rectangle contra segment per a les parets del plànol importat. Les parets que dibuixes a mà, en canvi, són cel·les de 10 cm i queden arrodonides a la quadrícula.</li>
       <li>Les volades davantera i posterior de cada model són una estimació: els fabricants publiquen la llargada i la batalla, però rarament el repartiment. Afecta lleugerament el gir.</li>
       <li>Un cotxe es considera fora quan el centre del cos arriba a una cel·la de sortida, no quan ha sortit del tot del recinte.</li>
       <li>Tot és pla i en 2D: no hi ha rampes, pendents, gàlib en alçada, vorades ni desnivells. Els pilars només existeixen si els dibuixes.</li>
       <li>No es comprova l'espai per obrir portes, ni l'accessibilitat, ni els recorreguts de vianants, ni cap normativa. El diàmetre de gir és el de vorera a vorera; els fabricants de vegades publiquen el de paret a paret, que és més gran.</li>
-      <li>«Sense sortida» pot voler dir dues coses diferents, i el simulador les distingeix: bloquejat per altres cotxes, o sense espai per maniobrar encara que estigués sol.</li>
+      <li>«Sense sortida» pot voler dir coses diferents, i el simulador les distingeix: tapat pels altres cotxes tal com estan aparcats ara (hi cabria si es traguessin), o sense espai per maniobrar encara que estigués sol al recinte.</li>
     </ul>
   </details>
 </aside>

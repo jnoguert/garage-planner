@@ -128,9 +128,13 @@ de `/garage-planner/`.
   (model de bicicleta cinematica). La trajectoria de sortida es busca amb
   maniobres endavant i enrere; si no n'hi ha cap de valida, el cotxe queda
   marcat.
-- Els cotxes surten **d'un en un** i en l'ordre que el simulador troba. No
-  es comprova el transit simultani, les cues, els encreuaments ni les
-  preferencies de pas.
+- Cada cotxe es comprova **de manera independent**, amb tots els altres
+  aparcats exactament on son ara — mai se suposa que algun altre ja ha
+  marxat per fer-li lloc (vegeu `evacuate()` a `planner.js`). Si un cotxe
+  nomes podria sortir despres que un altre es tragues primer, queda marcat
+  com a sense sortida (`blocked`), encara que aquell altre si que pugui
+  sortir. No es comprova el transit simultani, les cues, els encreuaments
+  ni les preferencies de pas.
 - La col·lisio es exacta: rectangle contra rectangle per als cotxes i
   rectangle contra segment per a les parets del planol importat. Les
   parets que dibuixes a ma, en canvi, son cel·les de 10 cm i queden
@@ -145,8 +149,8 @@ de `/garage-planner/`.
 - No es comprova l'espai per obrir portes, ni l'accessibilitat, ni cap
   normativa.
 - «Sense sortida» pot voler dir coses diferents, i el simulador les
-  distingeix (vegeu `src/planner.js`, `evacuate()`): tapat per altres
-  cotxes (`blocked`), sense espai per maniobrar encara que fos sol
-  (`geometry`), pressupost de cerca exhaurit (`budget`), o la posicio
-  inicial ja toca un mur o un altre cotxe, amb marge (`tight`) o sense
-  (`embedded`).
+  distingeix: tapat pels altres cotxes tal com estan aparcats ara, hi
+  cabria si es traguessin (`blocked`), sense espai per maniobrar encara
+  que fos sol al recinte (`geometry`), pressupost de cerca exhaurit
+  (`budget`), o la posicio inicial ja toca un mur o un altre cotxe, amb
+  marge (`tight`) o sense (`embedded`).

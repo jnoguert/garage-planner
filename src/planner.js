@@ -219,54 +219,46 @@ export function plan(world, car, obs, hf, v, opts) {
 
 /* ------------------------------------------------------------ evacuacio --- */
 
-/* Evacuacio per rondes: a cada ronda s'intenta plan() per a tots els que
-   queden, en surten els que troben sortida, i es repeteix. Si una ronda no en
-   treu cap, la resta queden bloquejats i es diagnostica per que.
+/* Cada cotxe es comprova de manera independent, amb TOTS els altres
+   aparcats exactament on son — mai se suposa que algun altre ja ha sortit
+   per fer-li lloc. Aixo es deliberat: un cotxe ha de poder sortir tal com
+   esta la planta ara, no nomes en una seqüencia hipotetica en que uns
+   altres es mouen primer. (Versio antiga: evacuacio "per rondes", on un
+   cotxe que nomes podia sortir despres que un altre marxés es donava per
+   bo — es va treure perque donava per suposat un ordre que ningu garanteix.)
 
    `onProgress` es opcional i pot retornar una promesa; l'app l'aprofita per
    cedir el fil i moure la barra. Els tests no la passen. */
 export async function evacuate(world, cars, opts, onProgress) {
   const hf = exitField(world);
-  let remaining = cars.map((c) => c.id);
+  const allIds = cars.map((c) => c.id);
   const out = [], stuck = [];
-  let round = 0, done = 0;
-  const total = cars.length || 1;
-
-  while (remaining.length) {
-    round++;
-    const before = remaining.length;
-    const snapshot = remaining.slice();
-    const leaving = [];
-    for (const id of snapshot) {
-      const car = cars.find((c) => c.id === id);
-      const res = plan(world, car, obstaclesFor(world, cars, id, snapshot), hf, specOf(car), opts);
-      if (res.ok) leaving.push({ id, path: res.path, man: res.man, len: res.len, round, present: snapshot.slice() });
-      await onProgress?.((done + leaving.length) / total * 0.9);
-    }
-    if (!leaving.length) { stuck.push(...remaining); break; }
-    out.push(...leaving);
-    done += leaving.length;
-    const gone = new Set(leaving.map((l) => l.id));
-    remaining = remaining.filter((id) => !gone.has(id));
-    if (remaining.length === before) break;
-  }
-
-  // Per als bloquejats, distingir "el tapen" de "no hi cap de cap manera".
   const diag = {};
-  for (const id of stuck) {
-    const car = cars.find((c) => c.id === id);
-    const v = specOf(car);
-    const alone = obstaclesFor(world, cars, id, []);      // sol al recinte
-    const res = plan(world, car, alone, hf, v, opts);
-    if (res.ok) diag[id] = { kind: "blocked", man: res.man };
-    else if (res.reason === "start") {
-      // La placa es massa justa de debo, o nomes amb el marge demanat?
-      const st = rearAxle(car, v);
-      diag[id] = freeAt(world, alone, st.x, st.y, st.th, v, 0) ? { kind: "tight" } : { kind: "embedded" };
-    } else diag[id] = res.reason === "budget" ? { kind: "budget" } : { kind: "geometry" };
-    await onProgress?.(0.95);
+  const total = cars.length || 1;
+  let done = 0;
+
+  for (const car of cars) {
+    const others = allIds.filter((id) => id !== car.id);
+    const withOthers = obstaclesFor(world, cars, car.id, others);
+    const res = plan(world, car, withOthers, hf, specOf(car), opts);
+    if (res.ok) {
+      out.push({ id: car.id, path: res.path, man: res.man, len: res.len, present: others });
+    } else {
+      stuck.push(car.id);
+      // Per diagnosticar per que: si tampoc hi cabria sol al recinte, no es
+      // culpa dels altres cotxes — distingeix "el tapen" de "no hi ha espai".
+      const v = specOf(car);
+      const alone = obstaclesFor(world, cars, car.id, []);
+      const resAlone = plan(world, car, alone, hf, v, opts);
+      if (resAlone.ok) diag[car.id] = { kind: "blocked" };
+      else if (resAlone.reason === "start") {
+        const st = rearAxle(car, v);
+        diag[car.id] = freeAt(world, alone, st.x, st.y, st.th, v, 0) ? { kind: "tight" } : { kind: "embedded" };
+      } else diag[car.id] = resAlone.reason === "budget" ? { kind: "budget" } : { kind: "geometry" };
+    }
+    done++;
+    await onProgress?.(done / total);
   }
-  await onProgress?.(1);
   return { out, stuck, diag, order: out.map((o) => o.id) };
 }
 
