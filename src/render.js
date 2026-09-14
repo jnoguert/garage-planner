@@ -335,8 +335,9 @@ function staticLayer(world, view) {
 
 /* `play`: null, o {id, path|null, present:[ids], t}. `hover`: {x,y} en
    metres, nomes quan tool==="car". `previewTh`: angle (rad) del fantasma de
-   col·locacio. `statusOf(id)`: "ok"|"amber"|"red"|null. */
-export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewTh, statusOf } = {}) {
+   col·locacio. `previewLine`: {x1,y1,x2,y2} en metres mentre s'arrossega
+   l'eina Línia. `statusOf(id)`: "ok"|"amber"|"red"|null. */
+export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewTh, previewLine, statusOf } = {}) {
   const { ctx, px, py, view } = V;
   const w = ctx.canvas.clientWidth, h = ctx.canvas.clientHeight;
   ctx.clearRect(0, 0, w, h);
@@ -376,5 +377,26 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     ctx.globalAlpha = .45;
     drawCar(V, { cx: hover.x, cy: hover.y, th: previewTh ?? 0 }, curSpec, css("--ghost"), null, false, null, false);
     ctx.globalAlpha = 1;
+  }
+
+  if (previewLine) {
+    const { x1, y1, x2, y2 } = previewLine;
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    ctx.save();
+    ctx.strokeStyle = css("--ghost"); ctx.lineWidth = Math.max(2, view.s * 0.09);
+    ctx.setLineDash([view.s * 0.15, view.s * 0.1]); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(px(x1), py(y1)); ctx.lineTo(px(x2), py(y2)); ctx.stroke();
+    ctx.restore();
+    if (len > 1e-6) {
+      const label = len.toFixed(2) + " m";
+      const horiz = y1 === y2;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const tx = px(mx) + (horiz ? 0 : view.s * 0.42), ty = py(my) + (horiz ? -view.s * 0.30 : 0);
+      ctx.font = `600 ${Math.max(10, view.s * 0.26)}px "Barlow",sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = DIM_CHIP_BG; ctx.fillRect(tx - tw / 2 - 4, ty - view.s * 0.16, tw + 8, view.s * 0.32);
+      ctx.fillStyle = css("--ghost"); ctx.fillText(label, tx, ty);
+    }
   }
 }

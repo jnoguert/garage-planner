@@ -2,7 +2,10 @@
    de motor viu aqui — nomes crida als moduls i pinta el que retornen. */
 
 import { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL } from "./geometry.js";
-import { newWorld, setCell, resize as resizeWorld, hasExit, hasEntrance, makeCars, presets } from "./scene.js";
+import {
+  newWorld, setCell, resize as resizeWorld, hasExit, hasEntrance, makeCars, presets,
+  addLine, setLineLength, lineLength, lineMidpoint,
+} from "./scene.js";
 import { evacuate, arrive, checkBothWays, summariseManeuvers } from "./planner.js";
 import { FLEET, spec, specOf } from "./vehicle.js";
 import { makeView, draw } from "./render.js";
@@ -24,6 +27,7 @@ const S = {
   playing: null,
   anim: null,
   hover: null,
+  linePreview: null,       // {x1,y1,x2,y2} mentre s'arrossega l'eina Línia
 };
 
 /* L'edicio manual del panell nomes toca `car.override`, mai FLEET. Es
@@ -43,6 +47,7 @@ function redraw() {
     sel: S.sel, play: S.playing, hover: S.hover, tool: S.tool,
     curSpec: S.tool === "car" ? curSpec() : null,
     previewTh: S.angle * Math.PI / 180,
+    previewLine: S.linePreview,
     statusOf,
   });
 }
@@ -121,6 +126,13 @@ cv.addEventListener("pointerdown", (e) => {
     if (hit >= 0) { S.cars.splice(hit, 1); invalidate(); drag = { mode: "erase" }; return; }
     drag = { mode: "eraseCell" }; paintAt(p, ASPH); return;
   }
+  if (S.tool === "line") {
+    // Nomes es marca l'extrem fix aqui; la linia no es planta fins deixar
+    // anar (endDrag), un cop sapiguem si es horitzontal o vertical.
+    drag = { mode: "line", x0: p.x, y0: p.y };
+    S.linePreview = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    redraw(); return;
+  }
   drag = { mode: "paint" }; paintAt(p);
 });
 cv.addEventListener("pointermove", (e) => {
@@ -130,7 +142,13 @@ cv.addEventListener("pointermove", (e) => {
   if (drag.mode === "paint") paintAt(p);
   else if (drag.mode === "eraseCell") paintAt(p, ASPH);
   else if (drag.mode === "erase") { const h = carAt(p.x, p.y); if (h >= 0) { S.cars.splice(h, 1); invalidate(); } }
-  else if (drag.mode === "rot") {
+  else if (drag.mode === "line") {
+    // Fantasma: es projecta sobre l'eix (horitzontal o vertical) que hagi
+    // recorregut mes des de l'extrem fix — el mateix criteri que addLine().
+    const horiz = Math.abs(p.x - drag.x0) >= Math.abs(p.y - drag.y0);
+    S.linePreview = { x1: drag.x0, y1: drag.y0, x2: horiz ? p.x : drag.x0, y2: horiz ? drag.y0 : p.y };
+    redraw();
+  } else if (drag.mode === "rot") {
     const car = S.cars.find((c) => c.id === drag.id); if (!car) return;
     const d = Math.hypot(p.x - car.cx, p.y - car.cy);
     if (d > 0.45) {
@@ -141,10 +159,45 @@ cv.addEventListener("pointermove", (e) => {
     }
   }
 });
-const endDrag = () => { drag = null; };
+const endDrag = () => {
+  if (drag?.mode === "line" && S.linePreview) {
+    const { x1, y1, x2, y2 } = S.linePreview;
+    const halfWidth = Math.max(CELL / 2, (S.brush * CELL) / 2);
+    if (addLine(S.world, x1, y1, x2, y2, halfWidth, VOID)) invalidate();
+  }
+  S.linePreview = null;
+  drag = null;
+};
 cv.addEventListener("pointerup", endDrag);
-cv.addEventListener("pointercancel", endDrag);
+cv.addEventListener("pointercancel", () => { S.linePreview = null; drag = null; redraw(); });
 cv.addEventListener("pointerleave", () => { S.hover = null; redraw(); });
+
+/* Doble clic sobre la mesura en metres d'una línia: en canvia la llargada
+   mantenint fix l'extrem d'inici (setLineLength ja ho fa). Nomes actiu amb
+   l'eina Línia seleccionada — aixi els dos clics del doble clic no acaben
+   pintant res amb una altra eina abans que arribi el dblclick (amb l'eina
+   Línia, dos clics quasi al mateix punt no arriben a 1 cel·la i addLine()
+   ja els descarta tot sol). */
+cv.addEventListener("dblclick", (e) => {
+  if (S.tool !== "line" || !S.world.lines.length) return;
+  const r = cv.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const s = V.view.s;
+  for (const line of S.world.lines) {
+    const mx = (line.x1 + line.x2) / 2, my = (line.y1 + line.y2) / 2;
+    const horiz = line.y1 === line.y2;
+    const ox = horiz ? 0 : s * 0.42, oy = horiz ? -s * 0.30 : 0;
+    const tx = V.px(mx) + ox, ty = V.py(my) + oy;
+    if (Math.hypot(sx - tx, sy - ty) > 16) continue;
+    const input = prompt("Nova llargada (m):", lineLength(line).toFixed(2));
+    if (input === null) return;
+    const val = parseFloat(input.replace(",", "."));
+    if (!isFinite(val) || val < CELL) { alert(`Cal un numero de com a minim ${CELL} m.`); return; }
+    setLineLength(S.world, line, val);
+    invalidate();
+    return;
+  }
+});
 
 cv.addEventListener("keydown", (e) => {
   if (e.key === "Delete" || e.key === "Backspace") {

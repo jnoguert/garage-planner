@@ -9,7 +9,7 @@ import { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL, mkSeg, idx, inBounds } from "./
 export { VOID, ASPH, SPOT, EXIT, ENTRANCE, CELL };
 
 export function newWorld(cols, rows) {
-  return { cols, rows, grid: new Uint8Array(cols * rows).fill(VOID), segs: [], _wall: null };
+  return { cols, rows, grid: new Uint8Array(cols * rows).fill(VOID), segs: [], lines: [], _wall: null };
 }
 
 /* Equivalents en metres de newWorld/fillRect — independents de CELL. Per
@@ -47,13 +47,66 @@ export function resize(world, cols, rows) {
   for (let r = 0; r < Math.min(rows, world.rows); r++)
     for (let c = 0; c < Math.min(cols, world.cols); c++)
       g[r * cols + c] = world.grid[idx(world, c, r)];
-  world.cols = cols; world.rows = rows; world.grid = g; world.segs = [];
+  world.cols = cols; world.rows = rows; world.grid = g; world.segs = []; world.lines = [];
   touch(world);
   return world;
 }
 
 export function hasExit(world) { return world.grid.includes(EXIT); }
 export function hasEntrance(world) { return world.grid.includes(ENTRANCE); }
+
+/* --------------------------------------------------------------- linies -- */
+/* Línies rectes ortonormals (horitzontals o verticals) dibuixades amb
+   l'eina "Línia": es guarden a `world.lines` perque, a diferencia de la
+   resta del dibuix a ma, es puguin editar despres — canviar la llargada
+   sense haver de repintar a ull (vegeu setLineLength).
+
+   ponytail: si s'esborra una part d'una línia amb la goma o el llapis,
+   l'entrada a `world.lines` es queda amb la llargada antiga (no es
+   retalla ni es torna a calcular a partir de la graella) — nomes canvia
+   quan s'edita explicitament amb setLineLength(). Prou per al cas d'us
+   (dibuixar una paret recta i ajustar-ne la mida), no per a qualsevol
+   combinacio possible d'edicions. */
+
+function paintLineRect(world, line, type) {
+  const { x1, y1, x2, y2, halfWidth: hw } = line;
+  if (x1 === x2) fillRectM(world, x1 - hw, Math.min(y1, y2), x1 + hw, Math.max(y1, y2), type);
+  else fillRectM(world, Math.min(x1, x2), y1 - hw, Math.max(x1, x2), y1 + hw, type);
+}
+
+/* (x0,y0) es l'extrem que queda FIXAT (on ha començat l'arrossegament);
+   (x1,y1) es on l'usuari ha deixat anar, projectat sobre l'eix horitzontal
+   o vertical segons quin dels dos moviments ha estat mes gran. Retorna la
+   línia creada, o null si ha quedat mes curta que una cel·la. */
+export function addLine(world, x0, y0, x1, y1, halfWidth, type = VOID) {
+  const horiz = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
+  const line = {
+    id: world.lines.reduce((m, l) => Math.max(m, l.id), 0) + 1,
+    x1: x0, y1: y0,
+    x2: horiz ? x1 : x0, y2: horiz ? y0 : y1,
+    halfWidth, type,
+  };
+  if (Math.hypot(line.x2 - line.x1, line.y2 - line.y1) < CELL) return null;
+  paintLineRect(world, line, type);
+  world.lines.push(line);
+  return line;
+}
+
+/* Torna a pintar la línia amb una llargada nova, mantenint FIX el primer
+   extrem (x1,y1 — on va comencar l'arrossegament original): esborra el
+   requadre vell (el torna a calçada oberta, com la goma) i en pinta un de
+   nou de la llargada demanada, en la mateixa direccio. */
+export function setLineLength(world, line, newLen) {
+  const horiz = line.y1 === line.y2;
+  const dir = Math.sign((horiz ? line.x2 - line.x1 : line.y2 - line.y1)) || 1;
+  paintLineRect(world, line, ASPH);
+  if (horiz) line.x2 = line.x1 + dir * newLen;
+  else line.y2 = line.y1 + dir * newLen;
+  paintLineRect(world, line, line.type);
+}
+
+export function lineLength(line) { return Math.hypot(line.x2 - line.x1, line.y2 - line.y1); }
+export function lineMidpoint(line) { return { x: (line.x1 + line.x2) / 2, y: (line.y1 + line.y2) / 2 }; }
 
 /* ---------------------------------------------------------------- cotxes -- */
 
@@ -109,6 +162,7 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 29.0, 90, GENERIC);
     }
     fr(world, 0, 16, 2, 21, EXIT);
+    fr(world, 0, 22, 2, 27, ENTRANCE);   // mateixa paret, just al costat de la sortida
     return { world, cars, veh: GENERIC };
   },
 
@@ -117,6 +171,7 @@ export const presets = {
     const world = nw(40, 34), cars = makeCars();
     fr(world, 0, 0, 39, 33, ASPH);
     fr(world, 2, 0, 8, 1, EXIT);
+    fr(world, 9, 0, 15, 1, ENTRANCE);    // mateixa paret, just al costat de la sortida
     for (let i = 0; i < 4; i++) {
       fr(world, 3 + i * 9, 24, 7 + i * 9, 33, SPOT);
       ac(cars, 5.5 + i * 9, 29.0, 90, GENERIC);
@@ -137,6 +192,7 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 24.0, 90, GENERIC);
     }
     fr(world, 0, 12, 2, 16, EXIT);
+    fr(world, 0, 17, 2, 21, ENTRANCE);   // mateixa paret, just al costat de la sortida
     return { world, cars, veh: GENERIC };
   },
 
@@ -155,6 +211,7 @@ export const presets = {
     fr(world, 0, 8, 15, 16, ASPH);     // bloc esquerre, y 4,15-8,01
     fr(world, 39, 0, 53, 8, ASPH);     // repla exterior (fora de la porta)
     fr(world, 41, 0, 42, 8, EXIT);     // fora del tot, passat el llindar
+    fr(world, 43, 0, 44, 8, ENTRANCE); // mateix llindar, just al costat de la sortida
     const W = 19.70, D1 = 4.15, D2 = 8.01, LX = 7.65;
     world.segs = [
       mkSeg(0, 0, W, 0), mkSeg(W, D1, LX, D1), mkSeg(LX, D1, LX, D2),
@@ -184,6 +241,7 @@ export const presets = {
     const world = nw(60, 36), cars = makeCars();
     fr(world, 3, 2, 57, 33, ASPH);
     fr(world, 0, 16, 2, 21, EXIT);
+    fr(world, 0, 22, 2, 27, ENTRANCE);   // mateixa paret, just al costat de la sortida
     return { world, cars, veh: GENERIC };
   },
 };

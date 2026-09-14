@@ -33,7 +33,7 @@ export function saveGarage(name, world, cars) {
   const data = {
     v: 1, savedAt: Date.now(),
     cols: world.cols, rows: world.rows,
-    grid: bytesToB64(world.grid), segs: world.segs,
+    grid: bytesToB64(world.grid), segs: world.segs, lines: world.lines,
     cars: cars.map((c) => ({ id: c.id, t: c.t, cx: c.cx, cy: c.cy, th: c.th, override: c.override })),
   };
   localStorage.setItem(PREFIX + name, JSON.stringify(data));
@@ -48,7 +48,7 @@ export function loadGarage(name) {
   if (!raw) return null;
   const data = JSON.parse(raw);
   return {
-    world: { cols: data.cols, rows: data.rows, grid: b64ToBytes(data.grid), segs: data.segs ?? [], _wall: null, _staticCache: null },
+    world: { cols: data.cols, rows: data.rows, grid: b64ToBytes(data.grid), segs: data.segs ?? [], lines: data.lines ?? [], _wall: null, _staticCache: null },
     cars: data.cars ?? [],
     savedAt: data.savedAt,
   };

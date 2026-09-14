@@ -267,6 +267,9 @@ details.caveats li{margin-bottom:7px}
     <button class="tool" data-tool="wall">
       <svg class="ic" viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="15" height="15" rx="1"/><path d="M2.5 7.8h15M2.5 13h15M7 2.5v5.3M13 2.5v5.3M10 7.8V13M5 13v5M15 13v5"/></svg>
       Mur / pilar</button>
+    <button class="tool" data-tool="line">
+      <svg class="ic" viewBox="0 0 20 20"><path d="M3 10h14"/><path d="M3 6.5v7M17 6.5v7"/><circle cx="3" cy="10" r="1.6" fill="currentColor" stroke="none"/></svg>
+      Línia recta</button>
     <button class="tool" data-tool="entrance">
       <svg class="ic" viewBox="0 0 20 20"><path d="M13 3v14"/><path d="M3 10h8M8 6l4 4-4 4"/></svg>
       Entrada</button>
@@ -284,7 +287,7 @@ details.caveats li{margin-bottom:7px}
     <input type="range" id="brush" min="10" max="300" step="10" value="100"><span class="val" id="brushVal">100 cm</span></div>
   <div class="row"><label for="angle">Angle del cotxe</label>
     <input type="range" id="angle" min="0" max="345" step="15" value="270"><span class="val" id="angleVal">270°</span></div>
-  <p class="note">Arrossega per pintar amb l'eina triada; amb la Goma esborres qualsevol element (mur, plaça, entrada, sortida o cotxe) sota el cursor. Amb l'eina Cotxe: tria primer l'angle (llisquet o tecles R/E) — el fantasma el mostra — i clica per plantar-lo ja orientat. Per reorientar-ne un ja plantat, torna-hi a clicar i arrossega. Supr per esborrar el seleccionat.</p>
+  <p class="note">Arrossega per pintar amb l'eina triada; amb la Goma esborres qualsevol element (mur, plaça, entrada, sortida o cotxe) sota el cursor. Amb l'eina Línia recta: arrossega des d'on vols l'extrem fix — es queda horitzontal o vertical segons cap a on arrossegues mes. Fes doble clic sobre la mesura en metres d'una línia per canviar-ne la llargada mantenint fix l'extrem d'inici. Amb l'eina Cotxe: tria primer l'angle (llisquet o tecles R/E) — el fantasma el mostra — i clica per plantar-lo ja orientat. Per reorientar-ne un ja plantat, torna-hi a clicar i arrossega. Supr per esborrar el seleccionat.</p>
 
   <h2>Plantes d'exemple</h2>
   <div class="btn-row">

@@ -72,6 +72,19 @@ propi al planificador: es l'objectiu del mode "Entrada" (vegeu mes avall).
 Els murs que dibuixes queden acotats en metres (render.js,
 `wallBoundaryRuns`), igual que els segments exactes d'un plànol importat.
 
+L'eina "Línia recta" dibuixa parets (VOID) horitzontals o verticals nomes —
+s'arrossega des de l'extrem que quedara FIX i es projecta sobre l'eix (X o
+Y) que hagi recorregut mes. Es guarden a `world.lines` (scene.js), a
+diferencia de la resta del dibuix a ma: aixo permet fer doble clic sobre la
+seva mesura en metres per canviar-ne la llargada (`setLineLength()`),
+mantenint fix el mateix extrem — no cal repintar a ull. Nomes activa amb
+l'eina Línia seleccionada.
+
+Els presets d'exemple (bateria/tandem/estret/buit) tenen l'entrada
+immediatament al costat de la sortida, al mateix mur — aixi el mode
+"Entrada" o "Entrada i sortida" funciona sense haver de dibuixar-hi res
+primer.
+
 ### Sortida, entrada, o totes dues
 
 El panell "Què comprova" tria que es simula, sempre en el pitjor cas (tots
