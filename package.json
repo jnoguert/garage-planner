@@ -1,0 +1,12 @@
+{
+  "name": "garage-planner",
+  "version": "1.0.0",
+  "description": "Simulador de sortida d'aparcament: comprova si tots els cotxes poden arribar a la sortida.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "python -m http.server 8000"
+  }
+}
