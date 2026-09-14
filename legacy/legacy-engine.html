@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador de sortida d'aparcament</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#14171a;
+  --asphalt:#2c3137;
+  --asphalt-lit:#353b42;
+  --paint:#e6e2d3;
+  --paint-dim:rgba(230,226,211,.22);
+  --panel:#1b1e22;
+  --panel-2:#23272c;
+  --line:#343a41;
+  --ink:#d8dcdf;
+  --ink-dim:#8b939b;
+  --green:#35a06a;
+  --amber:#e8a33d;
+  --red:#d6564a;
+  --route:#f0c419;
+  --focus:#6fb7d8;
+  --rail:290px;
+  --rail2:310px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--void);color:var(--ink);
+  font-family:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;
+}
+.app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr) var(--rail2);height:100dvh}
+.rail{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:18px 16px 40px}
+.rail-right{border-right:0;border-left:1px solid var(--line)}
+.stage{position:relative;display:flex;flex-direction:column;min-width:0;background:var(--void)}
+.canvas-wrap{flex:1;position:relative;min-height:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+canvas:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+
+h1{font-family:"Barlow Semi Condensed",sans-serif;font-size:20px;font-weight:600;margin:0 0 2px;letter-spacing:.01em}
+.sub{color:var(--ink-dim);font-size:12.5px;margin:0 0 20px}
+h2{font-size:12.5px;font-weight:600;color:var(--ink-dim);margin:22px 0 9px;letter-spacing:.02em}
+h2:first-of-type{margin-top:0}
+p.note{color:var(--ink-dim);font-size:12px;margin:8px 0 0}
+
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.tool{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);
+  color:var(--ink);border-radius:5px;padding:8px 9px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.tool:hover{border-color:#4a525a}
+.tool[aria-pressed="true"]{border-color:var(--paint);background:#2c3137}
+.tool:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.sw{width:13px;height:13px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.45)}
+
+.row{display:flex;align-items:center;gap:9px;margin:7px 0}
+.row label{flex:1;font-size:12.5px;color:var(--ink-dim)}
+input[type=number],select{
+  width:82px;background:#15181b;border:1px solid var(--line);color:var(--ink);
+  border-radius:4px;padding:5px 7px;font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums}
+select{width:100%}
+input[type=number]:focus,select:focus,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+input[type=range]{flex:1;accent-color:var(--paint)}
+.val{width:52px;text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+
+button.act{width:100%;background:var(--paint);color:#191c1f;border:0;border-radius:5px;
+  padding:11px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;margin-top:4px}
+button.act:hover{background:#fff}
+button.act:disabled{background:#3c4248;color:var(--ink-dim);cursor:default}
+button.ghost{background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+  border-radius:5px;padding:7px 9px;font:inherit;font-size:12.5px;cursor:pointer}
+button.ghost:hover{border-color:#4a525a}
+.btn-row{display:flex;gap:5px;flex-wrap:wrap}
+.btn-row button{flex:1}
+
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12.5px;color:var(--ink-dim);cursor:pointer}
+.chk input{accent-color:var(--paint);width:15px;height:15px}
+
+.verdict{border-radius:6px;padding:12px 13px;margin-bottom:14px;border:1px solid var(--line);background:var(--panel-2)}
+.verdict.ok{border-color:rgba(53,160,106,.55);background:rgba(53,160,106,.1)}
+.verdict.bad{border-color:rgba(214,86,74,.55);background:rgba(214,86,74,.1)}
+.verdict .big{font-family:"Barlow Semi Condensed",sans-serif;font-size:17px;font-weight:600;display:block;margin-bottom:3px}
+.verdict .small{font-size:12.5px;color:var(--ink-dim)}
+
+.results{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.res{display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;background:transparent;
+  border:1px solid transparent;border-radius:5px;padding:7px 8px;color:var(--ink);font:inherit;cursor:pointer}
+.res:hover{background:var(--panel-2)}
+.res[aria-current="true"]{background:var(--panel-2);border-color:var(--paint)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px}
+.res .name{font-size:13px;font-weight:500}
+.res .why{font-size:11.5px;color:var(--ink-dim);display:block;margin-top:1px}
+.res .num{margin-left:auto;font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--ink-dim);flex:none;padding-left:6px}
+
+.prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:10px 0 0}
+.prog i{display:block;height:100%;background:var(--paint);width:0;transition:width .12s linear}
+
+.hud{display:flex;gap:16px;align-items:center;padding:9px 16px;border-top:1px solid var(--line);
+  background:var(--panel);font-size:12px;color:var(--ink-dim);flex-wrap:wrap}
+.hud b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.hud .spacer{margin-left:auto}
+
+details.caveats{margin-top:24px;border-top:1px solid var(--line);padding-top:14px}
+details.caveats summary{cursor:pointer;font-size:12.5px;color:var(--ink-dim);font-weight:600;list-style:none}
+details.caveats summary::-webkit-details-marker{display:none}
+details.caveats summary::before{content:"+ ";font-weight:600}
+details.caveats[open] summary::before{content:"– "}
+details.caveats ul{margin:11px 0 0;padding-left:17px;color:var(--ink-dim);font-size:12px;line-height:1.55}
+details.caveats li{margin-bottom:7px}
+
+.empty{color:var(--ink-dim);font-size:12.5px;border:1px dashed var(--line);border-radius:6px;padding:16px 13px}
+
+@media (max-width:1180px){
+  .app{grid-template-columns:1fr;height:auto;min-height:100dvh}
+  .rail{border-right:0;border-top:1px solid var(--line);order:3}
+  .rail-right{order:2;border-left:0}
+  .stage{order:1;height:64dvh}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<aside class="rail">
+  <h1>Sortida d'aparcament</h1>
+  <p class="sub">Dibuixa la planta, posa-hi els cotxes i comprova si tots poden arribar a la sortida.</p>
+
+  <h2>Dibuixa la planta</h2>
+  <div class="tools" id="tools">
+    <button class="tool" data-tool="asphalt" aria-pressed="true"><span class="sw" style="background:#2c3137"></span>Calçada</button>
+    <button class="tool" data-tool="spot"><span class="sw" style="background:#353b42"></span>Plaça</button>
+    <button class="tool" data-tool="wall"><span class="sw" style="background:#14171a"></span>Mur / pilar</button>
+    <button class="tool" data-tool="exit"><span class="sw" style="background:#35a06a"></span>Sortida</button>
+    <button class="tool" data-tool="car"><span class="sw" style="background:#c9d1d9"></span>Cotxe</button>
+    <button class="tool" data-tool="erase"><span class="sw" style="background:transparent;border-style:dashed"></span>Treu cotxe</button>
+  </div>
+  <div class="row"><label for="brush">Gruix del pinzell</label>
+    <input type="range" id="brush" min="1" max="6" value="2"><span class="val" id="brushVal">2</span></div>
+  <div class="row"><label for="angle">Angle del cotxe</label>
+    <input type="range" id="angle" min="0" max="345" step="15" value="270"><span class="val" id="angleVal">270°</span></div>
+  <p class="note">Arrossega per pintar. Amb l'eina Cotxe, clica per posar-lo i arrossega per orientar-lo. Tecles R i E per girar 15°, Supr per esborrar el seleccionat.</p>
+
+  <h2>Plantes d'exemple</h2>
+  <div class="btn-row">
+    <button class="ghost" data-preset="bateria">Bateria doble</button>
+    <button class="ghost" data-preset="tandem">Pati en tàndem</button>
+    <button class="ghost" data-preset="estret">Passadís estret</button>
+  </div>
+  <div class="btn-row" style="margin-top:5px">
+    <button class="ghost" data-preset="garatge">El teu garatge</button>
+    <button class="ghost" data-preset="buit">Comença de zero</button>
+  </div>
+  <div class="btn-row" style="margin-top:5px">
+    <button class="ghost" data-preset="garatge3">El teu garatge amb 3 cotxes</button>
+  </div>
+
+  <h2>Mida del recinte</h2>
+  <div class="row"><label for="cols">Amplada (m)</label><input type="number" id="cols" min="8" max="80" step="0.5" value="28"></div>
+  <div class="row"><label for="rows">Fondària (m)</label><input type="number" id="rows" min="8" max="60" step="0.5" value="18"></div>
+  <p class="note">La quadrícula de dibuix és de 50 cm. Canviar la mida conserva el que ja hi ha dibuixat.</p>
+</aside>
+
+<main class="stage">
+  <div class="canvas-wrap"><canvas id="cv" tabindex="0" aria-label="Planta de l'aparcament"></canvas></div>
+  <div class="hud">
+    <span>Cotxes: <b id="hudCars">0</b></span>
+    <span>Gir mínim: <b id="hudR">–</b></span>
+    <span>Volada davantera: <b id="hudOh">–</b></span>
+    <span class="spacer" id="hudMsg"></span>
+  </div>
+</main>
+
+<aside class="rail rail-right">
+  <h2>Vehicle</h2>
+  <div class="row"><label for="preset">Model (el del cotxe seleccionat)</label></div>
+  <select id="preset"></select>
+  <div class="row"><label for="vL">Llargada (m)</label><input type="number" id="vL" step="0.05" value="4.28"></div>
+  <div class="row"><label for="vW">Amplada sense retrovisors (m)</label><input type="number" id="vW" step="0.05" value="1.79"></div>
+  <div class="row"><label for="vB">Batalla (m)</label><input type="number" id="vB" step="0.05" value="2.62"></div>
+  <div class="row"><label for="vF">Volada davantera (m)</label><input type="number" id="vF" step="0.05" value="0.88"></div>
+  <div class="row"><label for="vD">Diàmetre de gir (m)</label><input type="number" id="vD" step="0.1" value="10.9"></div>
+
+  <h2>Com condueix</h2>
+  <div class="row"><label for="margin">Marge de seguretat (m)</label><input type="number" id="margin" step="0.05" min="0" max="1" value="0.15"></div>
+  <div class="row"><label for="maxMan">Màxim de maniobres</label><input type="number" id="maxMan" step="1" min="0" max="40" value="14"></div>
+  <label class="chk"><input type="checkbox" id="allowRev" checked> Pot fer marxa enrere</label>
+
+  <button class="act" id="run">Comprova les sortides</button>
+  <div class="prog"><i id="progBar"></i></div>
+
+  <h2>Resultat</h2>
+  <div id="verdict"></div>
+  <ul class="results" id="results"></ul>
+
+  <details class="caveats">
+    <summary>Què comprova i què no</summary>
+    <ul>
+      <li>Cada cotxe es modela com un rectangle amb direcció a les rodes davanteres (model de bicicleta cinemàtica). La trajectòria de sortida es busca amb maniobres endavant i enrere; si no n'hi ha cap de vàlida, el cotxe queda marcat.</li>
+      <li>Els cotxes surten <b>d'un en un</b> i en l'ordre que el simulador troba. No es comprova el trànsit simultani, les cues, els encreuaments ni les preferències de pas.</li>
+      <li>La col·lisió és exacta: rectangle contra rectangle per als cotxes i rectangle contra segment per a les parets del plànol importat. Les parets que dibuixes a mà, en canvi, són cel·les de 50 cm i queden arrodonides a la quadrícula.</li>
+      <li>Les volades davantera i posterior de cada model són una estimació: els fabricants publiquen la llargada i la batalla, però rarament el repartiment. Afecta lleugerament el gir.</li>
+      <li>Un cotxe es considera fora quan el centre del seu eix posterior arriba a una cel·la de sortida, no quan ha sortit del tot del recinte.</li>
+      <li>Tot és pla i en 2D: no hi ha rampes, pendents, gàlib en alçada, vorades ni desnivells. Els pilars només existeixen si els dibuixes.</li>
+      <li>No es comprova l'espai per obrir portes, ni l'accessibilitat, ni els recorreguts de vianants, ni cap normativa. El diàmetre de gir és el de vorera a vorera; els fabricants de vegades publiquen el de paret a paret, que és més gran.</li>
+      <li>«Sense sortida» pot voler dir dues coses diferents, i el simulador les distingeix: bloquejat per altres cotxes, o sense espai per maniobrar encara que estigués sol.</li>
+    </ul>
+  </details>
+</aside>
+</div>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------- model --- */
+const VOID=0, ASPH=1, SPOT=2, EXIT=3;
+const CELL=0.5;              // metres per cel·la de dibuix
+const NTH=36;                // sectors d'orientació (10°)
+const XYBIN=0.15;            // resolució de la cerca en planta
+const STEP=0.22;             // metres per pas d'arc
+const GEAR_COST=1.2;         // penalització per canvi de marxa
+const REV_COST=0.5;          // sobrecost del metre en marxa enrere
+const MAX_EXPAND=260000;
+
+const PALETTE=["#93a6b3","#b57a63","#7a9a76","#9789b4","#c2a45c","#6f9aa8","#b0798f","#849070"];
+
+const S={
+  cols:56, rows:36,
+  grid:null,
+  cars:[],
+  nextId:1,
+  segs:[],
+  veh:1,
+  tool:"asphalt",
+  brush:2,
+  angle:270,
+  sel:-1,
+  results:null,
+  playing:null,
+  anim:null
+};
+
+function idx(c,r){return r*S.cols+c;}
+function inBounds(c,r){return c>=0&&r>=0&&c<S.cols&&r<S.rows;}
+function newGrid(cols,rows,fill){const g=new Uint8Array(cols*rows);g.fill(fill);return g;}
+S.grid=newGrid(S.cols,S.rows,VOID);
+
+/* vehicle ------------------------------------------------------------------ */
+/* Mides publicades pel fabricant, amplada sense retrovisors. La repartició
+   entre volada davantera i posterior és una estimació: els fabricants
+   publiquen la llargada i la batalla, però no sempre les volades. */
+const FLEET=[
+  {n:"Utilitari (genèric)",       L:4.05,W:1.75,B:2.55,Fo:0.85,D:10.6},
+  {n:"Compacte (genèric)",        L:4.28,W:1.79,B:2.62,Fo:0.88,D:10.9},
+  {n:"Familiar / SUV (genèric)",  L:4.55,W:1.86,B:2.68,Fo:0.92,D:11.5},
+  {n:"Furgoneta (genèrica)",      L:5.34,W:2.03,B:3.30,Fo:0.95,D:12.4},
+  {n:"Seat Ibiza 2017",           L:4.06,W:1.78,B:2.56,Fo:0.83,D:10.6},
+  {n:"Corolla hatchback 2023",    L:4.37,W:1.79,B:2.64,Fo:0.94,D:10.4},
+  {n:"Corolla Touring Sports 23", L:4.65,W:1.79,B:2.70,Fo:0.94,D:11.0},
+  {n:"Toyota Yaris 2023",         L:3.94,W:1.75,B:2.56,Fo:0.80,D:10.4}
+];
+
+const vcache=[];
+function spec(i){
+  const f=FLEET[i]||FLEET[0];
+  const k=`${f.L}|${f.W}|${f.B}|${f.Fo}|${f.D}`;
+  if(vcache[i]&&vcache[i].k===k) return vcache[i];
+  const Ro=Math.max(0.05,f.L-f.B-f.Fo);
+  const track=Math.max(0.8,f.W-0.20);
+  const Rk=f.D/2;
+  // radi de gir del centre de l'eix posterior, a partir del diàmetre vorera-vorera
+  const Rc=Math.max(1.5,Math.sqrt(Math.max(0.01,Rk*Rk-f.B*f.B))-track/2);
+  const sp={k,i,name:f.n,L:f.L,W:f.W,B:f.B,Fo:f.Fo,Ro,Rc,dmax:Math.atan(f.B/Rc)};
+  vcache[i]=sp; return sp;
+}
+function vehOf(car){ return spec(car.t ?? S.veh); }
+function curSpec(){ return spec(S.veh); }
+
+function readFields(){
+  const f=FLEET[S.veh];
+  f.L=+$("vL").value; f.W=+$("vW").value; f.B=+$("vB").value;
+  f.Fo=+$("vF").value; f.D=+$("vD").value;
+  vcache[S.veh]=null;
+}
+function writeFields(){
+  const f=FLEET[S.veh];
+  $("vL").value=f.L; $("vW").value=f.W; $("vB").value=f.B;
+  $("vF").value=f.Fo; $("vD").value=f.D;
+}
+
+/* ----------------------------------------------------------- col·lisions -- */
+/* El cotxe es tracta com un rectangle orientat. Contra els murs es comprova
+   cel·la a cel·la amb el teorema dels eixos separadors; contra els altres
+   cotxes, rectangle contra rectangle. El camp de distàncies als murs només
+   serveix per saltar-se la comprovació quan el cotxe és clarament en obert. */
+
+function edt1d(f,n,d,v,z){
+  let k=0; v[0]=0; z[0]=-1e20; z[1]=1e20;
+  for(let q=1;q<n;q++){
+    let s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]);
+    while(s<=z[k]){k--; s=((f[q]+q*q)-(f[v[k]]+v[k]*v[k]))/(2*q-2*v[k]);}
+    k++; v[k]=q; z[k]=s; z[k+1]=1e20;
+  }
+  k=0;
+  for(let q=0;q<n;q++){ while(z[k+1]<q)k++; d[q]=(q-v[k])*(q-v[k])+f[v[k]]; }
+}
+
+// distància (m) de cada cel·la al mur més proper; es recalcula quan canvia el dibuix
+let wallCache=null;
+function wallField(){
+  if(wallCache) return wallCache;
+  const n=S.cols*S.rows, sq=new Float64Array(n), INF=1e15;
+  for(let i=0;i<n;i++) sq[i]= S.grid[i]===VOID?0:INF;
+  const maxn=Math.max(S.cols,S.rows);
+  const f=new Float64Array(maxn), d=new Float64Array(maxn);
+  const vv=new Int32Array(maxn), zz=new Float64Array(maxn+1);
+  for(let x=0;x<S.cols;x++){
+    for(let y=0;y<S.rows;y++) f[y]=sq[y*S.cols+x];
+    edt1d(f,S.rows,d,vv,zz);
+    for(let y=0;y<S.rows;y++) sq[y*S.cols+x]=d[y];
+  }
+  for(let y=0;y<S.rows;y++){
+    const off=y*S.cols;
+    for(let x=0;x<S.cols;x++) f[x]=sq[off+x];
+    edt1d(f,S.cols,d,vv,zz);
+    for(let x=0;x<S.cols;x++) sq[off+x]=d[x];
+  }
+  const out=new Float64Array(n);
+  for(let i=0;i<n;i++) out[i]=Math.max(0,Math.sqrt(sq[i])*CELL-CELL*1.415);
+  wallCache=out; return out;
+}
+
+// conjunt d'obstacles per a un cotxe concret: murs + la resta de cotxes presents
+function obstaclesFor(excludeId, presentIds){
+  const set=new Set(presentIds);
+  const cars=[]; let carHd=0;
+  for(const c of S.cars){
+    if(c.id===excludeId || !set.has(c.id)) continue;
+    const sp=vehOf(c), hl=sp.L/2, hw=sp.W/2;
+    cars.push({cx:c.cx,cy:c.cy,co:Math.cos(c.th),si:Math.sin(c.th),hl,hw});
+    carHd=Math.max(carHd,Math.hypot(hl,hw));
+  }
+  return {wall:wallField(), cars, carHd, segs:S.segs};
+}
+
+function mkSeg(x1,y1,x2,y2){
+  return {x1,y1,x2,y2,
+    minx:Math.min(x1,x2),maxx:Math.max(x1,x2),
+    miny:Math.min(y1,y2),maxy:Math.max(y1,y2)};
+}
+
+// segment de paret contra rectangle orientat (retallat de Liang-Barsky
+// al sistema de referència del cotxe). Exacte a qualsevol mida.
+function segHitsOBB(sg,cx,cy,co,si,hl,hw){
+  const rad=hl+hw;
+  if(sg.minx>cx+rad||sg.maxx<cx-rad||sg.miny>cy+rad||sg.maxy<cy-rad) return false;
+  const ax=sg.x1-cx, ay=sg.y1-cy, bx=sg.x2-cx, by=sg.y2-cy;
+  const u1=ax*co+ay*si, v1=-ax*si+ay*co;
+  const u2=bx*co+by*si, v2=-bx*si+by*co;
+  const du=u2-u1, dv=v2-v1;
+  let t0=0,t1=1;
+  const P=[-du,du,-dv,dv], Q=[u1+hl,hl-u1,v1+hw,hw-v1];
+  for(let i=0;i<4;i++){
+    if(P[i]===0){ if(Q[i]<0) return false; continue; }
+    const r=Q[i]/P[i];
+    if(P[i]<0){ if(r>t1) return false; if(r>t0) t0=r; }
+    else      { if(r<t0) return false; if(r<t1) t1=r; }
+  }
+  return true;
+}
+
+// cel·la quadrada contra rectangle orientat
+function cellHitsOBB(c,r,cx,cy,co,si,hl,hw,ex,ey){
+  const qx=(c+0.5)*CELL-cx, qy=(r+0.5)*CELL-cy;
+  const h=CELL/2;
+  if(Math.abs(qx)>h+ex) return false;
+  if(Math.abs(qy)>h+ey) return false;
+  const p=h*(Math.abs(co)+Math.abs(si));
+  if(Math.abs(qx*co+qy*si)>hl+p) return false;
+  if(Math.abs(-qx*si+qy*co)>hw+p) return false;
+  return true;
+}
+
+// rectangle orientat contra rectangle orientat
+function obbHitsOBB(ax,ay,aco,asi,ahl,ahw, bx,by,bco,bsi,bhl,bhw){
+  const dx=bx-ax, dy=by-ay;
+  const axes=[[aco,asi],[-asi,aco],[bco,bsi],[-bsi,bco]];
+  for(const [ux,uy] of axes){
+    const pa=ahl*Math.abs(aco*ux+asi*uy)+ahw*Math.abs(-asi*ux+aco*uy);
+    const pb=bhl*Math.abs(bco*ux+bsi*uy)+bhw*Math.abs(-bsi*ux+bco*uy);
+    if(Math.abs(dx*ux+dy*uy)>pa+pb) return false;   // eix separador trobat
+  }
+  return true;
+}
+
+/* -------------------------------------------------------------- heuristic - */
+// distància en planta des de qualsevol cel·la fins a la sortida més propera
+function exitField(){
+  const N=S.cols*S.rows;
+  // Float64: amb float32 l'arrodoniment supera l'epsilon i la cua es reomple sense fi
+  const d=new Float64Array(N).fill(Infinity);
+  const q=[];
+  for(let i=0;i<N;i++) if(S.grid[i]===EXIT){d[i]=0;q.push(i);}
+  const D8=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.4142],[1,-1,1.4142],[-1,1,1.4142],[-1,-1,1.4142]];
+  const pq=new MinHeap();
+  for(const i of q) pq.push(0,i);
+  while(pq.size){
+    const [dist,i]=pq.pop();
+    if(dist>d[i]+1e-9) continue;
+    const c=i%S.cols, r=(i/S.cols)|0;
+    for(const [dc,dr,w] of D8){
+      const nc=c+dc, nr=r+dr;
+      if(!inBounds(nc,nr)) continue;
+      const j=idx(nc,nr);
+      if(S.grid[j]===VOID) continue;
+      const nd=dist+w*CELL;
+      if(nd<d[j]-1e-9){d[j]=nd;pq.push(nd,j);}
+    }
+  }
+  return d;
+}
+
+class MinHeap{
+  constructor(){this.k=[];this.v=[];}
+  get size(){return this.k.length;}
+  push(key,val){
+    const k=this.k,v=this.v; k.push(key); v.push(val);
+    let i=k.length-1;
+    while(i>0){const p=(i-1)>>1; if(k[p]<=k[i])break;
+      [k[p],k[i]]=[k[i],k[p]];[v[p],v[i]]=[v[i],v[p]]; i=p;}
+  }
+  pop(){
+    const k=this.k,v=this.v,n=k.length;
+    const top=[k[0],v[0]];
+    const lk=k.pop(), lv=v.pop();
+    if(n>1){k[0]=lk;v[0]=lv;let i=0;
+      for(;;){const l=2*i+1,r=l+1;let m=i;
+        if(l<k.length&&k[l]<k[m])m=l;
+        if(r<k.length&&k[r]<k[m])m=r;
+        if(m===i)break;
+        [k[m],k[i]]=[k[i],k[m]];[v[m],v[i]]=[v[i],v[m]];i=m;}
+    }
+    return top;
+  }
+}
+
+/* ------------------------------------------------------------- planificador */
+function rearAxle(car,v){
+  const off=v.L/2-v.Ro;
+  return {x:car.cx-Math.cos(car.th)*off, y:car.cy-Math.sin(car.th)*off, th:car.th};
+}
+function centreFromRear(x,y,th,v){
+  const off=v.L/2-v.Ro;
+  return {cx:x+Math.cos(th)*off, cy:y+Math.sin(th)*off, th};
+}
+
+// x,y = centre de l'eix posterior. Cert si el cotxe hi cap sense tocar res.
+function freeAt(obs,x,y,th,v,margin){
+  const co=Math.cos(th), si=Math.sin(th);
+  const off=v.L/2-v.Ro;
+  const cx=x+co*off, cy=y+si*off;
+  const hl=v.L/2+margin, hw=v.W/2+margin;
+  const ex=Math.abs(co)*hl+Math.abs(si)*hw;
+  const ey=Math.abs(si)*hl+Math.abs(co)*hw;
+  // El centre no pot sortir de la planta. El cos sí que pot sobresortir-ne:
+  // fora del dibuix hi ha el carrer, i és per on el cotxe travessa la sortida.
+  if(cx<0||cy<0||cx>S.cols*CELL||cy>S.rows*CELL) return false;
+  const hd=Math.hypot(hl,hw);
+
+  const cc=(cx/CELL)|0, cr=(cy/CELL)|0;
+  if(obs.wall[cr*S.cols+cc]<hd){
+    const c0=Math.max(0,((cx-ex)/CELL)|0), c1=Math.min(S.cols-1,((cx+ex)/CELL)|0);
+    const r0=Math.max(0,((cy-ey)/CELL)|0), r1=Math.min(S.rows-1,((cy+ey)/CELL)|0);
+    for(let r=r0;r<=r1;r++){
+      const base=r*S.cols;
+      for(let c=c0;c<=c1;c++){
+        if(S.grid[base+c]!==VOID) continue;
+        if(cellHitsOBB(c,r,cx,cy,co,si,hl,hw,ex,ey)) return false;
+      }
+    }
+  }
+  const segs=obs.segs;
+  for(let i=0;i<segs.length;i++)
+    if(segHitsOBB(segs[i],cx,cy,co,si,hl,hw)) return false;
+
+  const cars=obs.cars, lim=(hd+obs.carHd)*(hd+obs.carHd);
+  for(let i=0;i<cars.length;i++){
+    const o=cars[i], dx=o.cx-cx, dy=o.cy-cy;
+    if(dx*dx+dy*dy>lim) continue;
+    if(obbHitsOBB(cx,cy,co,si,hl,hw,o.cx,o.cy,o.co,o.si,o.hl,o.hw)) return false;
+  }
+  return true;
+}
+
+function cellTypeAt(x,y){
+  const c=Math.floor(x/CELL), r=Math.floor(y/CELL);
+  if(!inBounds(c,r)) return VOID;
+  return S.grid[idx(c,r)];
+}
+
+function plan(car,obs,hf,v,opts){
+  const nx=Math.ceil(S.cols*CELL/XYBIN), ny=Math.ceil(S.rows*CELL/XYBIN);
+  const closed=new Float64Array(nx*ny*NTH).fill(Infinity);
+  const X=[],Y=[],T=[],G=[],P=[],DIR=[],MAN=[];
+  const start=rearAxle(car,v);
+  if(!freeAt(obs,start.x,start.y,start.th,v,opts.margin))
+    return {ok:false,reason:"start"};
+  const key=(x,y,th)=>{
+    const ix=Math.floor(x/XYBIN), iy=Math.floor(y/XYBIN);
+    if(ix<0||iy<0||ix>=nx||iy>=ny) return -1;
+    let it=Math.floor(((th%(2*Math.PI))+2*Math.PI)%(2*Math.PI)/(2*Math.PI/NTH));
+    if(it>=NTH) it=0;
+    return (iy*nx+ix)*NTH+it;
+  };
+  const hAt=(x,y)=>{
+    const c=Math.floor(x/CELL), r=Math.floor(y/CELL);
+    if(!inBounds(c,r)) return Infinity;
+    return hf[idx(c,r)];
+  };
+  const h0=hAt(start.x,start.y);
+  if(!isFinite(h0)) return {ok:false,reason:"noroute"};
+
+  X.push(start.x);Y.push(start.y);T.push(start.th);G.push(0);P.push(-1);DIR.push(0);MAN.push(0);
+  const open=new MinHeap();
+  open.push(h0*0.9,0);
+  const k0=key(start.x,start.y,start.th); if(k0>=0) closed[k0]=0;
+
+  const steers=[-1,-0.68,-0.34,0,0.34,0.68,1].map(f=>f*v.dmax);
+  const dirs=opts.allowRev?[1,-1]:[1];
+  let expanded=0, goal=-1;
+
+  while(open.size){
+    const [,cur]=open.pop();
+    const cx=X[cur],cy=Y[cur],cth=T[cur],cg=G[cur];
+    const kk=key(cx,cy,cth);
+    if(kk>=0 && cg>closed[kk]+1e-6) continue;
+    const ctr=centreFromRear(cx,cy,cth,v);
+    if(cellTypeAt(ctr.cx,ctr.cy)===EXIT){goal=cur;break;}
+    if(++expanded>MAX_EXPAND) return {ok:false,reason:"budget"};
+
+    for(const dir of dirs){
+      for(const st of steers){
+        let nxp,nyp,nth;
+        if(Math.abs(st)<1e-6){
+          nxp=cx+dir*STEP*Math.cos(cth); nyp=cy+dir*STEP*Math.sin(cth); nth=cth;
+        }else{
+          const R=v.B/Math.tan(st);
+          const dth=dir*STEP/R;
+          nth=cth+dth;
+          nxp=cx-R*Math.sin(cth)+R*Math.sin(nth);
+          nyp=cy+R*Math.cos(cth)-R*Math.cos(nth);
+        }
+        if(!freeAt(obs,nxp,nyp,nth,v,opts.margin)) continue;
+        const gear = (DIR[cur]!==0 && DIR[cur]!==dir) ? 1 : 0;
+        const man = MAN[cur]+gear;
+        if(man>opts.maxMan) continue;
+        let ng=cg+STEP+(dir<0?STEP*REV_COST:0)+gear*GEAR_COST;
+        const nk=key(nxp,nyp,nth);
+        if(nk<0) continue;
+        if(ng>=closed[nk]-1e-6) continue;
+        const hh=hAt(nxp,nyp);
+        if(!isFinite(hh)) continue;
+        closed[nk]=ng;
+        X.push(nxp);Y.push(nyp);T.push(nth);G.push(ng);P.push(cur);DIR.push(dir);MAN.push(man);
+        open.push(ng+hh*0.9, X.length-1);
+      }
+    }
+  }
+  if(goal<0) return {ok:false,reason:"noroute"};
+  const path=[];
+  for(let i=goal;i>=0;i=P[i]) path.push({x:X[i],y:Y[i],th:T[i],dir:DIR[i]});
+  path.reverse();
+  return {ok:true,path,man:MAN[goal],len:G[goal]};
+}
+
+/* ------------------------------------------------------------- evacuació -- */
+async function runSim(){
+  if(S.cars.length===0){ setVerdict(null,"Encara no hi ha cap cotxe.","Tria l'eina Cotxe i clica sobre una plaça."); return; }
+  if(!S.grid.includes(EXIT)){ setVerdict(false,"Falta una sortida.","Pinta almenys una cel·la de sortida al perímetre."); return; }
+
+  wallCache=null;
+  const btn=$("run"); btn.disabled=true; btn.textContent="Calculant…";
+  S.results=null; S.playing=null; draw();
+  const opts={margin:+$("margin").value, maxMan:+$("maxMan").value, allowRev:$("allowRev").checked};
+  const hf=exitField();
+
+  let remaining=S.cars.map(c=>c.id);
+  const out=[];            // {id, path, man, round, present:[ids]}
+  const stuck=[];
+  let round=0, total=S.cars.length, done=0;
+
+  while(remaining.length){
+    round++;
+    const before=remaining.length;
+    const leaving=[];
+    const snapshot=remaining.slice();
+    for(const id of snapshot){
+      const car=S.cars.find(c=>c.id===id);
+      const obs=obstaclesFor(id, snapshot);
+      const res=plan(car,obs,hf,vehOf(car),opts);
+      if(res.ok) leaving.push({id,path:res.path,man:res.man,len:res.len,round,present:snapshot.slice()});
+      await yieldUI();
+      setProgress((done+leaving.length)/total*0.9);
+    }
+    if(!leaving.length){ stuck.push(...remaining); break; }
+    out.push(...leaving);
+    done+=leaving.length;
+    const gone=new Set(leaving.map(l=>l.id));
+    remaining=remaining.filter(id=>!gone.has(id));
+    if(remaining.length===before) break;
+  }
+
+  // per als bloquejats: distingir bloqueig d'espai insuficient
+  const diag={};
+  for(const id of stuck){
+    const car=S.cars.find(c=>c.id===id);
+    const v=vehOf(car);
+    const obs=obstaclesFor(id,[]);                 // sol al recinte
+    const res=plan(car,obs,hf,v,opts);
+    if(res.ok) diag[id]={kind:"blocked",man:res.man};
+    else if(res.reason==="start"){
+      // ¿la plaça és massa justa de debò, o només amb el marge demanat?
+      const bare=obstaclesFor(id,[]), st=rearAxle(car,v);
+      diag[id]= freeAt(bare,st.x,st.y,st.th,v,0) ? {kind:"tight"} : {kind:"embedded"};
+    }
+    else diag[id]= res.reason==="budget" ? {kind:"budget"} : {kind:"geometry"};
+    await yieldUI();
+  }
+  setProgress(1);
+
+  S.results={out,stuck,diag,order:out.map(o=>o.id)};
+  renderResults();
+  draw();
+  btn.disabled=false; btn.textContent="Comprova les sortides";
+  setTimeout(()=>setProgress(0),600);
+}
+
+const yieldUI=()=>new Promise(r=>setTimeout(r,0));
+function setProgress(p){$("progBar").style.width=(p*100).toFixed(0)+"%";}
+
+/* --------------------------------------------------------------- resultats */
+function setVerdict(ok,title,sub){
+  const el=$("verdict");
+  el.className="verdict"+(ok===true?" ok":ok===false?" bad":"");
+  el.innerHTML=`<span class="big"></span><span class="small"></span>`;
+  el.querySelector(".big").textContent=title;
+  el.querySelector(".small").textContent=sub;
+  $("results").innerHTML="";
+}
+
+function renderResults(){
+  const {out,stuck,diag}=S.results;
+  if(!stuck.length){
+    const worst=out.reduce((m,o)=>Math.max(m,o.man),0);
+    setVerdict(true,`Tots ${out.length} cotxes poden sortir`,
+      `Com a màxim calen ${worst} maniobre${worst===1?"":"s"} en el cas més difícil.`);
+  }else{
+    setVerdict(false,`${stuck.length} de ${S.cars.length} no poden sortir`,
+      `${out.length} sí que hi arriben. Clica un cotxe per veure'n el recorregut.`);
+  }
+  const ul=$("results"); ul.innerHTML="";
+  const label=id=>{
+    const i=S.cars.findIndex(c=>c.id===id);
+    return `${i+1}. ${vehOf(S.cars[i]).name}`;
+  };
+  for(const o of out){
+    const li=document.createElement("li");
+    li.innerHTML=`<button class="res" data-id="${o.id}">
+      <span class="dot" style="background:var(--green)"></span>
+      <span><span class="name">${label(o.id)}</span>
+      <span class="why">Surt a la tanda ${o.round} · ${o.man} maniobre${o.man===1?"":"s"} · ${o.len.toFixed(1)} m</span></span>
+      <span class="num">▶</span></button>`;
+    ul.appendChild(li);
+  }
+  const why={
+    blocked:"Tapat per altres cotxes que tampoc no poden sortir",
+    geometry:"No hi ha prou espai per maniobrar, ni tot sol",
+    embedded:"No hi cap: a la plaça ja toca un mur o un altre cotxe",
+    tight:"Hi cap justet, però no amb el marge de seguretat actual",
+    budget:"No s'ha trobat sortida dins del límit de maniobres"
+  };
+  for(const id of stuck){
+    const k=diag[id]?.kind||"geometry";
+    const li=document.createElement("li");
+    li.innerHTML=`<button class="res" data-id="${id}">
+      <span class="dot" style="background:var(--${(k==="blocked"||k==="tight"||k==="budget")?"amber":"red"})"></span>
+      <span><span class="name">${label(id)}</span>
+      <span class="why">${why[k]}</span></span></button>`;
+    ul.appendChild(li);
+  }
+  ul.querySelectorAll(".res").forEach(b=>b.addEventListener("click",()=>playCar(+b.dataset.id)));
+}
+
+function playCar(id){
+  const o=S.results?.out.find(x=>x.id===id);
+  document.querySelectorAll(".res").forEach(b=>b.setAttribute("aria-current", (+b.dataset.id===id)?"true":"false"));
+  if(S.anim) cancelAnimationFrame(S.anim);
+  if(!o){ S.playing={id,path:null,present:S.cars.map(c=>c.id),t:0}; draw(); return; }
+  S.playing={id,path:o.path,present:o.present,t:0};
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce){ S.playing.t=o.path.length-1; draw(); return; }
+  const dur=Math.min(6000, 700+o.path.length*22);
+  const t0=performance.now();
+  const tick=now=>{
+    const p=Math.min(1,(now-t0)/dur);
+    S.playing.t=p*(o.path.length-1);
+    draw();
+    if(p<1) S.anim=requestAnimationFrame(tick);
+  };
+  S.anim=requestAnimationFrame(tick);
+}
+
+/* ----------------------------------------------------------------- dibuix - */
+const cv=$("cv"), ctx=cv.getContext("2d");
+let view={s:1,ox:0,oy:0};
+
+function fitView(){
+  const w=cv.clientWidth, h=cv.clientHeight;
+  const dpr=Math.min(2,devicePixelRatio||1);
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=S.cols*CELL, H=S.rows*CELL;
+  const pad=24;
+  const s=Math.min((w-pad*2)/W,(h-pad*2)/H);
+  view={s, ox:(w-W*s)/2, oy:(h-H*s)/2};
+}
+const px=(x)=>view.ox+x*view.s, py=(y)=>view.oy+y*view.s;
+const mx=(X)=>(X-view.ox)/view.s, my=(Y)=>(Y-view.oy)/view.s;
+
+function draw(){
+  const w=cv.clientWidth, h=cv.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle=css("--void"); ctx.fillRect(0,0,w,h);
+  const s=view.s, cs=CELL*s;
+
+  // superfície
+  for(let r=0;r<S.rows;r++) for(let c=0;c<S.cols;c++){
+    const t=S.grid[idx(c,r)];
+    if(t===VOID) continue;
+    ctx.fillStyle = t===SPOT?css("--asphalt-lit") : t===EXIT?"rgba(53,160,106,.30)" : css("--asphalt");
+    ctx.fillRect(px(c*CELL),py(r*CELL),cs+.6,cs+.6);
+  }
+  // trama de la calçada
+  ctx.strokeStyle="rgba(255,255,255,.035)"; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let c=0;c<=S.cols;c+=2){ctx.moveTo(px(c*CELL),py(0));ctx.lineTo(px(c*CELL),py(S.rows*CELL));}
+  for(let r=0;r<=S.rows;r+=2){ctx.moveTo(px(0),py(r*CELL));ctx.lineTo(px(S.cols*CELL),py(r*CELL));}
+  ctx.stroke();
+
+  // marques de plaça: només les arestes exteriors dels blocs de plaça
+  ctx.strokeStyle=css("--paint"); ctx.lineWidth=Math.max(1.4,s*0.11); ctx.beginPath();
+  for(let r=0;r<S.rows;r++) for(let c=0;c<S.cols;c++){
+    if(S.grid[idx(c,r)]!==SPOT) continue;
+    const x=px(c*CELL), y=py(r*CELL);
+    const nb=(dc,dr)=>inBounds(c+dc,r+dr)&&S.grid[idx(c+dc,r+dr)]===SPOT;
+    if(!nb(0,-1)){ctx.moveTo(x,y);ctx.lineTo(x+cs,y);}
+    if(!nb(0,1)){ctx.moveTo(x,y+cs);ctx.lineTo(x+cs,y+cs);}
+    if(!nb(-1,0)){ctx.moveTo(x,y);ctx.lineTo(x,y+cs);}
+    if(!nb(1,0)){ctx.moveTo(x+cs,y);ctx.lineTo(x+cs,y+cs);}
+  }
+  ctx.stroke();
+
+  // vorada als murs
+  ctx.strokeStyle="rgba(140,150,160,.45)"; ctx.lineWidth=Math.max(1,s*0.06); ctx.beginPath();
+  for(let r=0;r<S.rows;r++) for(let c=0;c<S.cols;c++){
+    if(S.grid[idx(c,r)]!==VOID) continue;
+    const x=px(c*CELL), y=py(r*CELL);
+    const op=(dc,dr)=>inBounds(c+dc,r+dr)&&S.grid[idx(c+dc,r+dr)]!==VOID;
+    if(op(0,-1)){ctx.moveTo(x,y);ctx.lineTo(x+cs,y);}
+    if(op(0,1)){ctx.moveTo(x,y+cs);ctx.lineTo(x+cs,y+cs);}
+    if(op(-1,0)){ctx.moveTo(x,y);ctx.lineTo(x,y+cs);}
+    if(op(1,0)){ctx.moveTo(x+cs,y);ctx.lineTo(x+cs,y+cs);}
+  }
+  ctx.stroke();
+
+  // sortides
+  ctx.fillStyle=css("--green");
+  for(let r=0;r<S.rows;r++) for(let c=0;c<S.cols;c++){
+    if(S.grid[idx(c,r)]!==EXIT) continue;
+    if(((c+r)&1)===0) continue;
+    const x=px(c*CELL)+cs*0.5, y=py(r*CELL)+cs*0.5, k=cs*0.28;
+    ctx.beginPath();ctx.arc(x,y,k,0,7);ctx.fill();
+  }
+
+  // parets exactes del plànol
+  if(S.segs.length){
+    ctx.strokeStyle="rgba(190,200,210,.85)";
+    ctx.lineWidth=Math.max(1.6,s*0.10);
+    ctx.lineCap="round"; ctx.beginPath();
+    for(const g of S.segs){ ctx.moveTo(px(g.x1),py(g.y1)); ctx.lineTo(px(g.x2),py(g.y2)); }
+    ctx.stroke(); ctx.lineCap="butt";
+  }
+
+  // recorregut animat
+  const play=S.playing;
+  if(play?.path){
+    ctx.strokeStyle=css("--route"); ctx.lineWidth=Math.max(1.6,s*0.09);
+    ctx.globalAlpha=.85; ctx.beginPath();
+    const v=vehOf(S.cars.find(c=>c.id===play.id)||{});
+    for(let i=0;i<play.path.length;i++){
+      const p=play.path[i], cc=centreFromRear(p.x,p.y,p.th,v);
+      i?ctx.lineTo(px(cc.cx),py(cc.cy)):ctx.moveTo(px(cc.cx),py(cc.cy));
+    }
+    ctx.stroke(); ctx.globalAlpha=1;
+  }
+
+  // cotxes
+  const hidden=new Set();
+  if(play){ S.cars.forEach(c=>{ if(!play.present.includes(c.id)) hidden.add(c.id); }); }
+  S.cars.forEach((car,i)=>{
+    if(hidden.has(car.id)) return;
+    const vc=vehOf(car);
+    let pose=car, moving=false;
+    if(play?.path && car.id===play.id){
+      const t=play.t, i0=Math.floor(t), i1=Math.min(play.path.length-1,i0+1), f=t-i0;
+      const a=play.path[i0], b=play.path[i1];
+      const th=a.th+angDiff(b.th,a.th)*f;
+      pose=centreFromRear(a.x+(b.x-a.x)*f, a.y+(b.y-a.y)*f, th, vc);
+      moving=true;
+    }
+    drawCar(pose,vc,PALETTE[i%PALETTE.length],i+1, car.id===S.sel, statusOf(car.id), moving);
+  });
+
+  // fantasma de col·locació
+  if(S.hover && S.tool==="car"){
+    ctx.globalAlpha=.45;
+    drawCar({cx:S.hover.x,cy:S.hover.y,th:S.angle*Math.PI/180},curSpec(),"#cfd6dc",null,false,null,false);
+    ctx.globalAlpha=1;
+  }
+}
+
+function statusOf(id){
+  if(!S.results) return null;
+  if(S.results.stuck.includes(id)){
+    const k=S.results.diag[id]?.kind;
+    return (k==="blocked"||k==="tight"||k==="budget")?"amber":"red";
+  }
+  return "ok";
+}
+function angDiff(a,b){let d=(a-b)%(2*Math.PI); if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; return d;}
+
+function drawCar(pose,v,color,num,selected,status,moving){
+  const s=view.s;
+  ctx.save();
+  ctx.translate(px(pose.cx),py(pose.cy));
+  ctx.rotate(pose.th);
+  const L=v.L*s, W=v.W*s, rr=Math.min(L,W)*0.18;
+  ctx.beginPath(); roundRect(-L/2,-W/2,L,W,rr);
+  ctx.fillStyle=color; ctx.fill();
+  // morro
+  ctx.beginPath(); roundRect(L/2-L*0.24,-W/2+W*0.14,L*0.19,W*0.72,rr*0.6);
+  ctx.fillStyle="rgba(0,0,0,.30)"; ctx.fill();
+  ctx.beginPath(); roundRect(-L/2+L*0.10,-W/2+W*0.16,L*0.14,W*0.68,rr*0.6);
+  ctx.fillStyle="rgba(0,0,0,.18)"; ctx.fill();
+  ctx.beginPath(); roundRect(-L/2,-W/2,L,W,rr);
+  ctx.lineWidth=Math.max(1,s*0.05);
+  ctx.strokeStyle = status==="red"?css("--red") : status==="amber"?css("--amber")
+                  : status==="ok"?"rgba(53,160,106,.85)" : "rgba(0,0,0,.4)";
+  if(status) ctx.lineWidth=Math.max(1.8,s*0.09);
+  ctx.stroke();
+  if(selected){ctx.strokeStyle=css("--paint");ctx.setLineDash([s*0.2,s*0.16]);
+    ctx.lineWidth=Math.max(1.4,s*0.07);ctx.beginPath();roundRect(-L/2-s*0.12,-W/2-s*0.12,L+s*0.24,W+s*0.24,rr);ctx.stroke();ctx.setLineDash([]);}
+  ctx.restore();
+  if(num!=null && s>9 && !moving){
+    ctx.fillStyle="rgba(20,23,26,.75)";
+    ctx.beginPath();ctx.arc(px(pose.cx),py(pose.cy),s*0.26,0,7);ctx.fill();
+    ctx.fillStyle=css("--paint");
+    ctx.font=`600 ${Math.max(9,s*0.32)}px "Barlow Semi Condensed",sans-serif`;
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(num,px(pose.cx),py(pose.cy)+s*0.02);
+  }
+}
+function roundRect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* ------------------------------------------------------------- interacció - */
+let drag=null;
+cv.addEventListener("pointerdown",e=>{
+  cv.setPointerCapture(e.pointerId); cv.focus();
+  const p=ptr(e);
+  if(S.tool==="car"){
+    const hit=carAt(p.x,p.y);
+    if(hit>=0 && e.shiftKey===false && S.sel===S.cars[hit].id){ drag={mode:"rot",id:S.cars[hit].id}; return; }
+    if(hit>=0){ S.sel=S.cars[hit].id; S.veh=S.cars[hit].t??S.veh;
+      $("preset").value=S.veh; writeFields(); updateHud();
+      drag={mode:"rot",id:S.sel}; draw(); return; }
+    const car={id:S.nextId++,t:S.veh,cx:p.x,cy:p.y,th:S.angle*Math.PI/180};
+    S.cars.push(car); S.sel=car.id; drag={mode:"rot",id:car.id};
+    invalidate(); return;
+  }
+  if(S.tool==="erase"){
+    const hit=carAt(p.x,p.y);
+    if(hit>=0){S.cars.splice(hit,1); invalidate();}
+    drag={mode:"erase"}; return;
+  }
+  drag={mode:"paint"}; paintAt(p);
+});
+cv.addEventListener("pointermove",e=>{
+  const p=ptr(e);
+  S.hover=p;
+  if(!drag){ if(S.tool==="car") draw(); return; }
+  if(drag.mode==="paint") paintAt(p);
+  else if(drag.mode==="erase"){const h=carAt(p.x,p.y); if(h>=0){S.cars.splice(h,1);invalidate();}}
+  else if(drag.mode==="rot"){
+    const car=S.cars.find(c=>c.id===drag.id); if(!car) return;
+    const d=Math.hypot(p.x-car.cx,p.y-car.cy);
+    if(d>0.45){
+      let a=Math.atan2(p.y-car.cy,p.x-car.cx)*180/Math.PI;
+      a=Math.round(a/15)*15; car.th=a*Math.PI/180;
+      S.angle=((a%360)+360)%360; $("angle").value=S.angle; $("angleVal").textContent=S.angle+"°";
+      invalidate();
+    }
+  }
+});
+const endDrag=()=>{drag=null;};
+cv.addEventListener("pointerup",endDrag);
+cv.addEventListener("pointercancel",endDrag);
+cv.addEventListener("pointerleave",()=>{S.hover=null;draw();});
+
+cv.addEventListener("keydown",e=>{
+  if(e.key==="Delete"||e.key==="Backspace"){
+    const i=S.cars.findIndex(c=>c.id===S.sel);
+    if(i>=0){S.cars.splice(i,1);S.sel=-1;invalidate();e.preventDefault();}
+  }
+  if(e.key==="r"||e.key==="R"||e.key==="e"||e.key==="E"){
+    const d=(e.key==="r"||e.key==="R")?15:-15;
+    const car=S.cars.find(c=>c.id===S.sel);
+    S.angle=(((S.angle+d)%360)+360)%360;
+    $("angle").value=S.angle; $("angleVal").textContent=S.angle+"°";
+    if(car){car.th=S.angle*Math.PI/180;}
+    invalidate();
+  }
+});
+
+function ptr(e){
+  const r=cv.getBoundingClientRect();
+  return {x:mx(e.clientX-r.left), y:my(e.clientY-r.top)};
+}
+function carAt(x,y){
+  for(let i=S.cars.length-1;i>=0;i--){
+    const c=S.cars[i], v=vehOf(c);
+    const dx=x-c.cx, dy=y-c.cy;
+    const u=dx*Math.cos(c.th)+dy*Math.sin(c.th), w=-dx*Math.sin(c.th)+dy*Math.cos(c.th);
+    if(Math.abs(u)<=v.L/2&&Math.abs(w)<=v.W/2) return i;
+  }
+  return -1;
+}
+function paintAt(p){
+  const type={asphalt:ASPH,spot:SPOT,wall:VOID,exit:EXIT}[S.tool];
+  if(type===undefined) return;
+  const c0=Math.floor(p.x/CELL), r0=Math.floor(p.y/CELL);
+  const b=S.brush, half=(b-1)/2;
+  let changed=false;
+  for(let r=Math.round(r0-half);r<=Math.round(r0+half);r++)
+    for(let c=Math.round(c0-half);c<=Math.round(c0+half);c++){
+      if(!inBounds(c,r)) continue;
+      if(S.grid[idx(c,r)]!==type){S.grid[idx(c,r)]=type;changed=true;}
+    }
+  if(changed) invalidate();
+}
+function invalidate(){
+  wallCache=null;
+  S.results=null; S.playing=null;
+  if(S.anim) cancelAnimationFrame(S.anim);
+  $("results").innerHTML=""; $("verdict").innerHTML="";
+  $("hudCars").textContent=S.cars.length;
+  draw();
+}
+
+/* --------------------------------------------------------------- plantes -- */
+function fillRect(c0,r0,c1,r1,t){
+  wallCache=null;
+  for(let r=Math.max(0,r0);r<=Math.min(S.rows-1,r1);r++)
+    for(let c=Math.max(0,c0);c<=Math.min(S.cols-1,c1);c++) S.grid[idx(c,r)]=t;
+}
+function resize(cols,rows){
+  const g=newGrid(cols,rows,VOID);
+  for(let r=0;r<Math.min(rows,S.rows);r++)
+    for(let c=0;c<Math.min(cols,S.cols);c++) g[r*cols+c]=S.grid[idx(c,r)];
+  S.cols=cols;S.rows=rows;S.grid=g;wallCache=null;
+  $("cols").value=(cols*CELL).toFixed(1); $("rows").value=(rows*CELL).toFixed(1);
+  fitView();
+}
+function addCar(cxCells,cyCells,deg,t){
+  S.cars.push({id:S.nextId++,t:t??S.veh,cx:cxCells*CELL,cy:cyCells*CELL,th:deg*Math.PI/180});
+}
+function addCarM(xm,ym,deg,t){   // en metres, per a plànols reals
+  S.cars.push({id:S.nextId++,t:t??S.veh,cx:xm,cy:ym,th:deg*Math.PI/180});
+}
+
+const presets={
+  // Dues fileres en bateria de 2,5 × 5,0 m, passadís central de 6 m
+  // i 2,5 m de gir lliure als dos extrems del passadís
+  bateria(){
+    S.segs=[]; resize(60,36); S.grid.fill(VOID); S.cars=[];
+    fillRect(0,2,59,33,ASPH);
+    for(let i=0;i<10;i++){
+      fillRect(5+i*5,2,9+i*5,11,SPOT);
+      fillRect(5+i*5,24,9+i*5,33,SPOT);
+      addCar(7.5+i*5, 7.0, 270);
+      addCar(7.5+i*5, 29.0, 90);
+    }
+    fillRect(0,16,2,21,EXIT);
+  },
+  // Pati tancat: quatre places al fons i dos cotxes aparcats al davant
+  tandem(){
+    S.segs=[]; resize(40,34); S.grid.fill(VOID); S.cars=[];
+    fillRect(0,0,39,33,ASPH);
+    fillRect(2,0,8,1,EXIT);
+    for(let i=0;i<4;i++){
+      fillRect(3+i*9,24,7+i*9,33,SPOT);
+      addCar(5.5+i*9, 29.0, 90);
+    }
+    fillRect(12,14,16,23,SPOT); addCar(14.5,18.5,90);
+    fillRect(21,14,25,23,SPOT); addCar(23.5,18.5,90);
+  },
+  // Les mateixes places, però amb un passadís de només 4,5 m
+  estret(){
+    S.segs=[]; resize(50,29); S.grid.fill(VOID); S.cars=[];
+    fillRect(0,0,49,28,ASPH);
+    for(let i=0;i<8;i++){
+      fillRect(5+i*5,0,9+i*5,9,SPOT);
+      fillRect(5+i*5,19,9+i*5,28,SPOT);
+      addCar(7.5+i*5,5.0,270);
+      addCar(7.5+i*5,24.0,90);
+    }
+    fillRect(0,12,2,16,EXIT);
+  },
+  // Planta real: L de 19,70 × 4,15 m amb bloc esquerre de 7,65 × 8,01 m.
+  // Porta a l'extrem dret. Les parets van com a segments exactes; la
+  // quadrícula només s'hi ajusta per sobre (mai per dins).
+  garatge(){
+    S.segs=[]; resize(54,18); S.grid.fill(VOID); S.cars=[];
+    fillRect(0,0,39,8,ASPH);     // braç superior, y 0–4,15
+    fillRect(0,8,15,16,ASPH);    // bloc esquerre, y 4,15–8,01
+    fillRect(39,0,53,8,ASPH);    // replà exterior (fora de la porta)
+    fillRect(41,0,42,8,EXIT);    // fora del tot: eix posterior passat el llindar
+    const W=19.70, D1=4.15, D2=8.01, LX=7.65;
+    S.segs=[ mkSeg(0,0,W,0), mkSeg(W,D1,LX,D1), mkSeg(LX,D1,LX,D2),
+             mkSeg(LX,D2,0,D2), mkSeg(0,D2,0,0) ];
+    // Filera de quatre, morro cap a la porta, folgances iguals de 48 cm.
+    // Col·locats amb el Corolla llarg (Touring Sports): si en tens el
+    // hatchback, canvia'ls amb el desplegable i encara hi sobra espai.
+    const IB=4, CT=6, YA=7;
+    addCarM( 2.805, 2.075, 0, CT);
+    addCarM( 7.935, 2.075, 0, CT);
+    addCarM(12.770, 2.075, 0, IB);
+    addCarM(17.250, 2.075, 0, YA);
+    S.veh=CT; writeFields();
+  },
+  // Variant amb tres cotxes: tots tres a la sala de l'esquerra, en tres
+  // carrils, i el passadís lliure. El Corolla ha d'anar al carril del mig.
+  garatge3(){
+    presets.garatge(); S.cars=[];
+    const IB=4, CT=6, YA=7;
+    addCarM(3.00, 1.555, 0, IB);
+    addCarM(3.00, 4.005, 0, CT);
+    addCarM(3.00, 6.455, 0, YA);
+    S.veh=CT; writeFields();
+  },
+  buit(){
+    S.segs=[]; resize(60,36); S.grid.fill(VOID); S.cars=[];
+    fillRect(3,2,57,33,ASPH);
+    fillRect(0,16,2,21,EXIT);
+  }
+};
+
+/* ------------------------------------------------------------------- wire - */
+function $(id){return document.getElementById(id);}
+
+$("tools").addEventListener("click",e=>{
+  const b=e.target.closest(".tool"); if(!b) return;
+  S.tool=b.dataset.tool; S.sel=-1;
+  document.querySelectorAll(".tool").forEach(t=>t.setAttribute("aria-pressed", t===b?"true":"false"));
+  draw();
+});
+$("brush").addEventListener("input",e=>{S.brush=+e.target.value;$("brushVal").textContent=S.brush;});
+$("angle").addEventListener("input",e=>{
+  S.angle=+e.target.value; $("angleVal").textContent=S.angle+"°";
+  const car=S.cars.find(c=>c.id===S.sel); if(car){car.th=S.angle*Math.PI/180;}
+  draw();
+});
+document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{
+  presets[b.dataset.preset](); S.sel=-1; invalidate(); fitView(); draw();
+}));
+$("cols").addEventListener("change",e=>{
+  resize(Math.max(16,Math.round(+e.target.value/CELL)),S.rows); invalidate();
+});
+$("rows").addEventListener("change",e=>{
+  resize(S.cols,Math.max(16,Math.round(+e.target.value/CELL))); invalidate();
+});
+FLEET.forEach((f,i)=>{
+  const o=document.createElement("option"); o.value=i; o.textContent=f.n;
+  $("preset").appendChild(o);
+});
+$("preset").value=S.veh;
+$("preset").addEventListener("change",e=>{
+  S.veh=+e.target.value; writeFields();
+  const car=S.cars.find(c=>c.id===S.sel);
+  if(car) car.t=S.veh;                 // reassigna el model del cotxe seleccionat
+  invalidate(); updateHud();
+});
+["vL","vW","vB","vF","vD"].forEach(id=>$(id).addEventListener("input",()=>{
+  readFields(); invalidate(); updateHud();
+}));
+["margin","maxMan","allowRev"].forEach(id=>$(id).addEventListener("input",()=>{S.results=null;renderClear();}));
+function renderClear(){$("results").innerHTML="";$("verdict").innerHTML="";S.playing=null;draw();}
+$("run").addEventListener("click",runSim);
+
+function updateHud(){
+  const v=curSpec();
+  $("hudR").textContent=v.Rc.toFixed(2)+" m";
+  $("hudOh").textContent=v.Fo.toFixed(2)+" m";
+  $("hudCars").textContent=S.cars.length;
+  $("hudMsg").textContent=`Angle de direcció màxim ${(v.dmax*180/Math.PI).toFixed(0)}°`;
+}
+
+addEventListener("resize",()=>{fitView();draw();});
+writeFields();
+presets.garatge();
+fitView(); updateHud(); draw();
+$("hudCars").textContent=S.cars.length;
+</script>
+</body>
+</html>
