@@ -478,31 +478,61 @@ function showManeuversFor(id, path) {
   if (ol) ol.innerHTML = maneuverList(path);
 }
 
+// "prefers-reduced-motion" saltava directament al fotograma final — a
+// molts PC amb Windows aquesta preferencia esta activada pel sistema
+// (estalvi d'energia, accessibilitat) sense que l'usuari ho hagi triat
+// expressament per a aquesta animacio, que es la manera principal de
+// veure el recorregut, no decoracio. La reduim (mes curta i sense
+// requestAnimationFrame per fotograma), no l'eliminem.
+function animatePlaying(pathLen) {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dur = reduce ? 450 : Math.min(6000, Math.max(900, 700 + pathLen * 22));
+  const t0 = performance.now();
+  const tick = (now) => {
+    const p = Math.min(1, (now - t0) / dur);
+    S.playing.t = p * (pathLen - 1);
+    redraw();
+    if (p < 1) S.anim = requestAnimationFrame(tick);
+  };
+  S.anim = requestAnimationFrame(tick);
+}
+
+/* Per a un cotxe atrapat amb diagnostic "blocked", el motor ja sap quin
+   recorregut hauria fet tot sol i on xoca amb un altre cotxe (vegeu
+   checkDirection a planner.js) — en mode "both" cal triar quina direccio
+   ensenyar (la que en tingui, preferint sortida). */
+function blockedPathFor(id, dir) {
+  const d = S.results?.diag?.[id];
+  if (!d) return null;
+  if (S.results?.mode === "both") {
+    const pick = (dir && d[dir]?.path) ? d[dir] : (d.exit?.path ? d.exit : d.entry);
+    return pick?.path ? pick : null;
+  }
+  return d.path ? d : null;
+}
+
 function playCar(id, dir) {
   const both = S.results?.mode === "both";
   const found = S.results?.out.find((x) => x.id === id);
   const o = both ? found?.[dir] : found;
   document.querySelectorAll(".res").forEach((b) => b.setAttribute("aria-current", (+b.dataset.id === id && (!dir || b.dataset.dir === dir)) ? "true" : "false"));
   if (S.anim) cancelAnimationFrame(S.anim);
-  if (!o) { S.playing = { id, path: null, present: S.cars.map((c) => c.id), t: 0 }; redraw(); return; }
+  if (!o) {
+    const blocked = blockedPathFor(id, dir);
+    if (!blocked) { S.playing = { id, path: null, present: S.cars.map((c) => c.id), t: 0 }; redraw(); return; }
+    if (both) showManeuversFor(id, blocked.path);
+    S.playing = { id, path: blocked.path, present: S.cars.map((c) => c.id), t: 0, fail: true, hitAt: blocked.hitAt };
+    // El traç i la cinta ensenyen el recorregut sencer que hauria fet (per
+    // veure si l'hauria acabat fent servir), pero el cotxe animat s'atura
+    // exactament al punt de xoc — no te sentit que el dibuixem travessant
+    // l'altre cotxe com si no hi fos.
+    const hitIdx = blocked.hitAt ? blocked.path.indexOf(blocked.hitAt) : -1;
+    animatePlaying(hitIdx >= 0 ? hitIdx + 1 : blocked.path.length);
+    return;
+  }
   if (both) showManeuversFor(id, o.path);
   S.playing = { id, path: o.path, present: o.present, t: 0 };
-  // "prefers-reduced-motion" saltava directament al fotograma final — a
-  // molts PC amb Windows aquesta preferencia esta activada pel sistema
-  // (estalvi d'energia, accessibilitat) sense que l'usuari ho hagi triat
-  // expressament per a aquesta animacio, que es la manera principal de
-  // veure el recorregut, no decoracio. La reduim (mes curta i sense
-  // requestAnimationFrame per fotograma), no l'eliminem.
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const dur = reduce ? 450 : Math.min(6000, Math.max(900, 700 + o.path.length * 22));
-  const t0 = performance.now();
-  const tick = (now) => {
-    const p = Math.min(1, (now - t0) / dur);
-    S.playing.t = p * (o.path.length - 1);
-    redraw();
-    if (p < 1) S.anim = requestAnimationFrame(tick);
-  };
-  S.anim = requestAnimationFrame(tick);
+  animatePlaying(o.path.length);
 }
 
 $("run").addEventListener("click", runSim);

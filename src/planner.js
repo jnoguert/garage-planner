@@ -325,7 +325,22 @@ async function checkDirection(world, cars, opts, goalType, onProgress) {
       const v = specOf(car);
       const alone = obstaclesFor(world, cars, car.id, []);
       const resAlone = plan(world, car, alone, hf, v, opts, goalType);
-      if (resAlone.ok) diag[car.id] = { kind: "blocked" };
+      if (resAlone.ok) {
+        // "blocked": hi cabria sol. Guardem el recorregut que hauria fet i
+        // el primer punt on es queda barrat, perque la UI el pugui ensenyar
+        // en vermell en lloc de nomes dir-ho amb text.
+        //
+        // El marge es el mateix amb que s'ha fet la comprovacio (opts.margin),
+        // no 0: el que decideix el veredicte no es nomes el toc fisic sino
+        // tambe passar-hi mes a prop del marge de seguretat demanat. Amb 0
+        // aqui, un recorregut que frega un cotxe a 5 cm amb marge 0,15
+        // no marcava cap punt i la creu no sortia mai.
+        let hitAt = null;
+        for (const pose of resAlone.path) {
+          if (!freeAt(world, withOthers, pose.x, pose.y, pose.th, v, opts.margin)) { hitAt = pose; break; }
+        }
+        diag[car.id] = { kind: "blocked", path: resAlone.path, hitAt };
+      }
       else if (resAlone.reason === "start") {
         const st = rearAxle(car, v);
         diag[car.id] = freeAt(world, alone, st.x, st.y, st.th, v, 0) ? { kind: "tight" } : { kind: "embedded" };
@@ -347,7 +362,9 @@ export function evacuate(world, cars, opts, onProgress) {
    despres es giren els recorreguts trobats — vegeu reversePath(). */
 export async function arrive(world, cars, opts, onProgress) {
   const r = await checkDirection(world, cars, opts, ENTRANCE, onProgress);
-  return { ...r, out: r.out.map((o) => ({ ...o, path: reversePath(o.path) })) };
+  const diag = {};
+  for (const id in r.diag) diag[id] = r.diag[id].path ? { ...r.diag[id], path: reversePath(r.diag[id].path) } : r.diag[id];
+  return { ...r, out: r.out.map((o) => ({ ...o, path: reversePath(o.path) })), diag };
 }
 
 /* Entrada i sortida: cada cotxe ha de poder fer les dues coses, amb tots

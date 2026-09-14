@@ -364,13 +364,30 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
   ctx.drawImage(staticLayer(world, view), px(0), py(0), W * view.s, H * view.s);
 
   if (play?.path) {
-    ctx.strokeStyle = css("--route"); ctx.lineWidth = Math.max(1.6, view.s * 0.09);
-    ctx.globalAlpha = .85; ctx.beginPath();
     const v = specOf(cars.find((c) => c.id === play.id) || {});
-    for (let i = 0; i < play.path.length; i++) {
-      const p = play.path[i], cc = centreFromRear(p.x, p.y, p.th, v);
-      i ? ctx.lineTo(px(cc.cx), py(cc.cy)) : ctx.moveTo(px(cc.cx), py(cc.cy));
+    const hw = v.W / 2;
+    const routeVar = play.fail ? "--red" : "--route";
+    const pts = play.path.map((p) => {
+      const cc = centreFromRear(p.x, p.y, p.th, v);
+      const nx = -Math.sin(p.th), ny = Math.cos(p.th);
+      return { cx: cc.cx, cy: cc.cy, lx: cc.cx + nx * hw, ly: cc.cy + ny * hw, rx: cc.cx - nx * hw, ry: cc.cy - ny * hw };
+    });
+
+    // Cinta de l'amplada real del cotxe (no nomes el centre): un quad per
+    // tram, no un sol poligon amb tots els punts — un recorregut que gira
+    // sobre si mateix (marxa enrere) autointersecaria un poligon unic.
+    ctx.fillStyle = cssRgba(routeVar, .22);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      ctx.beginPath();
+      ctx.moveTo(px(a.lx), py(a.ly)); ctx.lineTo(px(b.lx), py(b.ly));
+      ctx.lineTo(px(b.rx), py(b.ry)); ctx.lineTo(px(a.rx), py(a.ry));
+      ctx.closePath(); ctx.fill();
     }
+
+    ctx.strokeStyle = css(routeVar); ctx.lineWidth = Math.max(1.6, view.s * 0.09);
+    ctx.globalAlpha = .85; ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(px(p.cx), py(p.cy)) : ctx.moveTo(px(p.cx), py(p.cy))));
     ctx.stroke(); ctx.globalAlpha = 1;
   }
 
@@ -389,6 +406,28 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     }
     drawCar(V, pose, vc, PALETTE[i % PALETTE.length], i + 1, car.id === sel, statusOf?.(car.id) ?? null, moving);
   });
+
+  /* El punt exacte on el recorregut queda barrat per un altre cotxe (nomes
+     el diagnostic "blocked" el porta — vegeu checkDirection a planner.js).
+     Va DESPRES dels cotxes a proposit: el cotxe animat s'atura justament
+     aqui, i si es dibuixava abans el tapava sencer. */
+  if (play?.fail && play.hitAt) {
+    const v = specOf(cars.find((c) => c.id === play.id) || {});
+    const hc = centreFromRear(play.hitAt.x, play.hitAt.y, play.hitAt.th, v);
+    const hx = px(hc.cx), hy = py(hc.cy), k = Math.max(7, view.s * 0.3);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = css("--paint-ink"); ctx.lineWidth = Math.max(5, view.s * 0.19);
+    ctx.beginPath();
+    ctx.moveTo(hx - k * .6, hy - k * .6); ctx.lineTo(hx + k * .6, hy + k * .6);
+    ctx.moveTo(hx + k * .6, hy - k * .6); ctx.lineTo(hx - k * .6, hy + k * .6);
+    ctx.stroke();
+    ctx.strokeStyle = css("--red"); ctx.lineWidth = Math.max(2.5, view.s * 0.11);
+    ctx.beginPath(); ctx.arc(hx, hy, k, 0, 7); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(hx - k * .6, hy - k * .6); ctx.lineTo(hx + k * .6, hy + k * .6);
+    ctx.moveTo(hx + k * .6, hy - k * .6); ctx.lineTo(hx - k * .6, hy + k * .6);
+    ctx.stroke(); ctx.lineCap = "butt";
+  }
 
   if (hover && tool === "car" && curSpec) {
     ctx.globalAlpha = .45;

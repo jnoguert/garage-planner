@@ -143,6 +143,21 @@ Els resultats de "Comprova les sortides" inclouen el desglossament de
 maniobres de cada cotxe (`summariseManeuvers` a `planner.js`): un tram per
 marxa, amb la distancia i cap a quin costat gira.
 
+En clicar un cotxe, el recorregut no es dibuixa nomes com una linia pel
+centre: es pinta tota l'AMPLADA del cotxe (una cinta, un quad per tram a
+`render.js` — un sol poligon amb tots els punts s'autointersecaria en fer
+marxa enrere), aixi es veu exactament per on passaria la carrosseria i no
+nomes per on aniria el seu punt mig.
+
+Els cotxes amb diagnostic `blocked` tambe son clicables: ensenyen **en
+vermell** el recorregut que haurien fet si estiguessin sols i una creu al
+primer punt on queden barrats per un altre cotxe (`diag[id].path` i
+`diag[id].hitAt`, que `checkDirection` calcula amb el MATEIX marge de
+seguretat de la comprovacio — amb marge 0 un recorregut que frega un cotxe
+a 5 cm amb marge 0,15 no marcava cap punt). El cotxe animat s'atura a la
+creu; la cinta segueix ensenyant el recorregut sencer, per veure si
+l'hauria acabat fent.
+
 ### Dades de vehicles i el gir
 
 Cada entrada de `data/fleet.json` porta un camp `turningMeasure` explicit
