@@ -172,10 +172,17 @@ function wallBoundaryRuns(world, minLen) {
 
 /* Amplada neta de cada obertura d'entrada (o entrada+sortida combinada, GATE)
    dibuixada: component connex de cel·les de `matchType`, amplada = el costat
-   curt del seu requadre englobant. Es la mesura de seguretat real (l'entrada
-   es un forat en un mur — vegeu test/entrance.test.js: si es massa estreta,
-   el cotxe hi toca els brancals igual que a qualsevol altre pas). Diferent
-   de wallBoundaryRuns: aquella etiqueta la llargada dels trams de MUR, no
+   LLARG del seu requadre englobant — no el curt. Un forat en un mur es
+   sempre mes prim en la direccio en que travessa el mur (el gruix del mur,
+   normalment pocs cm) que en la direccio en que hi passa el cotxe (l'amplada
+   real que importa); el costat curt nomes diu quin gruix de mur s'ha
+   foradat, no si el cotxe hi cap. Bug real trobat (i corregit): amb
+   Math.min() enlloc de max(), el preset "bateria" (obertura real de 6,00 m)
+   ensenyava "1,50 m" — semblava impossible d'entendre per que un cotxe hi
+   podia passar. Es la mesura de seguretat real (l'entrada es un forat en un
+   mur — vegeu test/entrance.test.js: si es massa estreta, el cotxe hi toca
+   els brancals igual que a qualsevol altre pas). Diferent de
+   wallBoundaryRuns: aquella etiqueta la llargada dels trams de MUR, no
    l'amplada del buit. */
 function entranceOpenings(world, minLen, matchType) {
   const { cols, rows, grid } = world;
@@ -199,7 +206,7 @@ function entranceOpenings(world, minLen, matchType) {
       }
     }
     const wM = (maxC - minC + 1) * CELL, hM = (maxR - minR + 1) * CELL;
-    const width = Math.min(wM, hM);
+    const width = Math.max(wM, hM);
     if (width < minLen) continue;
     openings.push({ cx: (minC + maxC + 1) / 2 * CELL, cy: (minR + maxR + 1) / 2 * CELL, width, horiz: wM >= hM });
   }
