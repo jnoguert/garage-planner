@@ -417,8 +417,15 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     ctx.globalAlpha = 1;
   }
 
+  /* `play.present` son els cotxes que hi havia mentre es calculava el
+     recorregut; la resta no es dibuixen. El que s'esta MOVENT no hi es mai
+     (present = "tots els altres"), i per aixo quedava amagat: es veia el
+     traç i el cotxe enlloc — l'animacio semblava que no hi fos. Sempre es
+     dibuixa, faltaria mes. */
   const hidden = new Set();
-  if (play) cars.forEach((c) => { if (!play.present.includes(c.id)) hidden.add(c.id); });
+  if (play) cars.forEach((c) => {
+    if (c.id !== play.id && !play.present.includes(c.id)) hidden.add(c.id);
+  });
   cars.forEach((car, i) => {
     if (hidden.has(car.id)) return;
     const vc = specOf(car);
