@@ -14,7 +14,7 @@ const S = {
   world: newWorld(56, 36),
   cars: makeCars(),
   tool: "asphalt",
-  brush: 10,               // en cel·les; sincronitzat amb el llisquet en metres
+  brush: 10,               // en cel·les; sincronitzat amb el llisquet en cm
   angle: 270,
   veh: 1,                 // index a FLEET del "model seleccionat" al panell
   sel: -1,
@@ -103,8 +103,12 @@ cv.addEventListener("pointerdown", (e) => {
       $("preset").value = S.veh; writeFields(); updateHud();
       drag = { mode: "rot", id: S.sel }; redraw(); return;
     }
+    // Cotxe nou: es planta amb l'angle ja triat (llisquet o tecles R/E,
+    // vegeu el fantasma que ja el mostrava abans de clicar) — un sol clic
+    // el col·loca, no cal arrossegar per orientar-lo despres. Per canviar
+    // l'angle d'un cotxe ja plantat, torna-hi a clicar i arrossega.
     const car = S.cars.addM(p.x, p.y, S.angle, S.veh);
-    S.sel = car.id; drag = { mode: "rot", id: car.id };
+    S.sel = car.id;
     invalidate(); return;
   }
   if (S.tool === "erase") {
@@ -162,12 +166,13 @@ $("tools").addEventListener("click", (e) => {
   document.querySelectorAll(".tool").forEach((t) => t.setAttribute("aria-pressed", t === b ? "true" : "false"));
   redraw();
 });
-/* El llisquet es en metres (mes llegible); S.brush es el nombre de cel·les
-   que fa servir paintAt, derivat aqui. */
+/* El llisquet es en centimetres (coincideix amb la mida de cel·la, 10cm, i
+   es mes concret que metres per a un pinzell d'aquesta escala); S.brush es
+   el nombre de cel·les que fa servir paintAt, derivat aqui. */
 $("brush").addEventListener("input", (e) => {
-  const m = +e.target.value;
-  S.brush = Math.max(1, Math.round(m / CELL));
-  $("brushVal").textContent = m.toFixed(1) + " m";
+  const cm = +e.target.value;
+  S.brush = Math.max(1, Math.round(cm / 100 / CELL));
+  $("brushVal").textContent = cm + " cm";
 });
 $("angle").addEventListener("input", (e) => {
   S.angle = +e.target.value; $("angleVal").textContent = S.angle + "°";
@@ -319,9 +324,14 @@ function playCar(id) {
   if (S.anim) cancelAnimationFrame(S.anim);
   if (!o) { S.playing = { id, path: null, present: S.cars.map((c) => c.id), t: 0 }; redraw(); return; }
   S.playing = { id, path: o.path, present: o.present, t: 0 };
+  // "prefers-reduced-motion" saltava directament al fotograma final — a
+  // molts PC amb Windows aquesta preferencia esta activada pel sistema
+  // (estalvi d'energia, accessibilitat) sense que l'usuari ho hagi triat
+  // expressament per a aquesta animacio, que es la manera principal de
+  // veure el recorregut, no decoracio. La reduim (mes curta i sense
+  // requestAnimationFrame per fotograma), no l'eliminem.
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce) { S.playing.t = o.path.length - 1; redraw(); return; }
-  const dur = Math.min(6000, 700 + o.path.length * 22);
+  const dur = reduce ? 450 : Math.min(6000, Math.max(900, 700 + o.path.length * 22));
   const t0 = performance.now();
   const tick = (now) => {
     const p = Math.min(1, (now - t0) / dur);

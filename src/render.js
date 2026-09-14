@@ -165,6 +165,41 @@ function wallBoundaryRuns(world, minLen) {
   return runs;
 }
 
+/* Amplada neta de cada obertura d'entrada dibuixada: component connex de
+   cel·les ENTRANCE, amplada = el costat curt del seu requadre englobant. Es
+   la mesura de seguretat real (l'entrada es un forat en un mur — vegeu
+   test/entrance.test.js: si es massa estreta, el cotxe hi toca els
+   brancals igual que a qualsevol altre pas). Diferent de wallBoundaryRuns:
+   aquella etiqueta la llargada dels trams de MUR, no l'amplada del buit. */
+function entranceOpenings(world, minLen) {
+  const { cols, rows, grid } = world;
+  const seen = new Uint8Array(cols * rows);
+  const openings = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const i0 = idx(world, c, r);
+    if (grid[i0] !== ENTRANCE || seen[i0]) continue;
+    let minC = c, maxC = c, minR = r, maxR = r;
+    const stack = [i0]; seen[i0] = 1;
+    while (stack.length) {
+      const cur = stack.pop();
+      const cc = cur % cols, cr = (cur / cols) | 0;
+      minC = Math.min(minC, cc); maxC = Math.max(maxC, cc);
+      minR = Math.min(minR, cr); maxR = Math.max(maxR, cr);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = cc + dc, nr = cr + dr;
+        if (!inBounds(world, nc, nr)) continue;
+        const ni = idx(world, nc, nr);
+        if (grid[ni] === ENTRANCE && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
+      }
+    }
+    const wM = (maxC - minC + 1) * CELL, hM = (maxR - minR + 1) * CELL;
+    const width = Math.min(wM, hM);
+    if (width < minLen) continue;
+    openings.push({ cx: (minC + maxC + 1) / 2 * CELL, cy: (minR + maxR + 1) / 2 * CELL, width, horiz: wM >= hM });
+  }
+  return openings;
+}
+
 function drawDimensions(V, world) {
   const { ctx, px, py, view: { s } } = V;
   if (s < 14) return;                    // massa lluny per llegir-hi res
@@ -184,6 +219,17 @@ function drawDimensions(V, world) {
     ctx.fillStyle = "rgba(20,23,26,.72)";
     ctx.fillRect(tx - tw / 2 - 4, ty - s * 0.15, tw + 8, s * 0.30);
     ctx.fillStyle = css("--ink-dim");
+    ctx.fillText(label, tx, ty);
+  }
+
+  ctx.font = `600 ${Math.max(9, s * 0.24)}px "Barlow",sans-serif`;
+  for (const o of entranceOpenings(world, minLen)) {
+    const label = "↔ " + o.width.toFixed(2) + " m";
+    const tw = ctx.measureText(label).width;
+    const tx = px(o.cx) + (o.horiz ? 0 : s * 0.5), ty = py(o.cy) + (o.horiz ? s * 0.34 : 0);
+    ctx.fillStyle = "rgba(20,23,26,.78)";
+    ctx.fillRect(tx - tw / 2 - 4, ty - s * 0.15, tw + 8, s * 0.30);
+    ctx.fillStyle = css("--focus");
     ctx.fillText(label, tx, ty);
   }
 }
