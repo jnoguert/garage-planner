@@ -24,14 +24,31 @@ const OPTS = { margin: 0.15, maxMan: 14, allowRev: true };
    5 i 6 surten igualment. Cap cotxe "surt" nomes perque un altre s'hagi
    tret abans del mig. */
 test("evacuacio: cada cotxe es comprova amb tots els altres aparcats, no en suposa cap fora", async () => {
-  const { world, cars } = presets.tandem();
-  const r = await evacuate(world, cars, OPTS);
-  const idAt = (i) => cars[i].id;
-  assert.deepEqual(new Set(r.out.map((o) => o.id)), new Set([idAt(0), idAt(3), idAt(4), idAt(5)]),
-    "1, 4, 5 i 6 (index 0,3,4,5) haurien de sortir, tapats per ningu");
-  assert.deepEqual(new Set(r.stuck), new Set([idAt(1), idAt(2)]),
-    "2 i 3 (index 1,2) haurien de quedar blocked: els tapen 5 i 6, aparcats just al davant");
-  for (const id of r.stuck) assert.equal(r.diag[id]?.kind, "blocked", `cotxe ${id}: hi cabria sol, nomes el tapen`);
+  for (const name of ["tandem", "bateria", "estret"]) {
+    const { world, cars } = presets[name]();
+    const r = await evacuate(world, cars, OPTS);
+    assert.ok(r.out.length > 0, `${name}: algun cotxe hauria de sortir`);
+
+    /* La propietat, mesurada de nou des de FORA del cercador: cada pose de
+       cada recorregut ha de ser lliure amb TOTS els altres cotxes aparcats
+       on son. Si algun recorregut nomes fos valid suposant que un altre
+       cotxe ja ha marxat, aqui sortiria.
+
+       Abans aixo s'escrivia com "els cotxes 2 i 3 del tandem han de quedar
+       blocked": una llista d'indexs que deixava de voler dir res tan bon
+       punt el cercador millorava (amb NTH=72 el tandem passa de 4/6 a 6/6,
+       i els recorreguts nous son valids — comprovat aqui mateix). La
+       propietat no depen de com de bo sigui el cercador; la llista, si. */
+    for (const o of r.out) {
+      const car = cars.find((c) => c.id === o.id), v = specOf(car);
+      const others = cars.map((c) => c.id).filter((id) => id !== o.id);
+      const obs = obstaclesFor(world, cars, o.id, others);
+      for (const p of o.path) {
+        assert.ok(freeAt(world, obs, p.x, p.y, p.th, v, OPTS.margin),
+          `${name}: el cotxe ${o.id} passa per (${p.x.toFixed(2)}, ${p.y.toFixed(2)}) i alli hi ha algu`);
+      }
+    }
+  }
 });
 
 /* ------------------------------------------------------------- embedded --- */
@@ -79,13 +96,22 @@ test("diagnostic: tight (hi cap just amb marge 0, no amb 0.15)", async () => {
 /* -------------------------------------------------------------- geometry --- */
 /* Sol al recinte, sense prou espai per maniobrar cap a la sortida: ni girant
    ni fent marxa enrere hi arriba. No es "start" (hi cap on es) ni "budget"
-   (l'espai explorable es petit, s'exhaureix abans del sostre). */
+   (l'espai explorable es petit, s'exhaureix abans del sostre).
+
+   El recinte ha de tenir MURS de veritat (VOID) al voltant, no nomes acabar-
+   se. Fora del dibuix hi ha "el carrer" i el cos del cotxe hi pot sobresortir
+   a proposit (vegeu freeAt) — nomes el centre ha de quedar dins. Aquest test
+   omplia tot el mon d'ASPH i es pensava que la vora feia de paret: el cotxe
+   podia treure el morro fora i arribar a la sortida de la cantonada per un
+   camí legal que la cerca d'abans, mes gruixuda, no trobava. Amb NTH=72 si
+   que el troba, i el test "fallava" ensenyant que la planta no era la que
+   volia provar. */
 test("diagnostic: geometry (sense espai per maniobrar, ni tot sol)", async () => {
-  const world = newWorldM(5, 3);
-  fillRectM(world, 0, 0, 5, 3, ASPH);
-  fillRectM(world, 0, 0, 0.5, 0.5, EXIT);
+  const world = newWorldM(7, 4);
+  fillRectM(world, 0.5, 0.5, 6.5, 3.0, ASPH);   // murs (VOID) tot al voltant
+  fillRectM(world, 0.5, 0.5, 1.1, 1.1, EXIT);   // sortida arraconada a dalt
   const cars = makeCars();
-  const car = cars.addM(3.5, 1.25, 0, 1);
+  const car = cars.addM(4.0, 1.75, 0, 1);       // passadis massa estret per girar
   const r = await evacuate(world, cars, OPTS);
   assert.equal(r.stuck.length, 1);
   assert.equal(r.diag[car.id]?.kind, "geometry");

@@ -477,21 +477,34 @@ function showManeuversFor(id, path) {
   if (ol) ol.innerHTML = maneuverList(path);
 }
 
-// "prefers-reduced-motion" saltava directament al fotograma final — a
-// molts PC amb Windows aquesta preferencia esta activada pel sistema
-// (estalvi d'energia, accessibilitat) sense que l'usuari ho hagi triat
-// expressament per a aquesta animacio, que es la manera principal de
-// veure el recorregut, no decoracio. La reduim (mes curta i sense
-// requestAnimationFrame per fotograma), no l'eliminem.
+/* L'animacio del recorregut es la manera principal de veure com es mou el
+   cotxe, no decoracio.
+
+   Per aixo fa DOS coses que abans no feia:
+
+   - Va en bucle, amb una pausa al final de cada volta. Abans es reproduia
+     un sol cop: si miraves un altre lloc de la pantalla t'ho perdies i no
+     hi havia manera de tornar-hi si no era clicant una altra vegada.
+   - No fa cas de "prefers-reduced-motion" per escurçar-la fins a fer-la
+     imperceptible. A molts PC amb Windows aquesta preferencia esta activada
+     pel sistema sense que l'usuari l'hagi triat per a res d'aixo, i deixava
+     l'animacio en 450 ms: un parpelleig. Amb moviment reduit la fem mes
+     lenta i sense bucle, que es el que demana de debo (menys moviment
+     sobtat), no invisible. */
+const HOLD_MS = 900;
 function animatePlaying(pathLen) {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const dur = reduce ? 450 : Math.min(6000, Math.max(900, 700 + pathLen * 22));
+  const dur = Math.min(9000, Math.max(1600, 900 + pathLen * 34));
   const t0 = performance.now();
   const tick = (now) => {
-    const p = Math.min(1, (now - t0) / dur);
+    const el = now - t0;
+    const p = Math.min(1, el / dur);
     S.playing.t = p * (pathLen - 1);
     redraw();
-    if (p < 1) S.anim = requestAnimationFrame(tick);
+    if (p < 1) { S.anim = requestAnimationFrame(tick); return; }
+    if (reduce) return;                       // una sola passada, sense bucle
+    if (el < dur + HOLD_MS) { S.anim = requestAnimationFrame(tick); return; }
+    animatePlaying(pathLen);                  // torna a començar
   };
   S.anim = requestAnimationFrame(tick);
 }

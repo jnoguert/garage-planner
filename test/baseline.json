@@ -4,7 +4,7 @@
   "maxMan": 14,
   "allowRev": true
  },
- "_generat": "src/*.js: cada cotxe es comprova independent, amb tots els altres aparcats; goal-check per subGoalPose evita saltar per sobre d una zona objectiu mes prima que STEP (bug3); presets amb entrada+sortida combinades en un GATE unic — regenerat en canviar aixo",
+ "_generat": "NTH 36 -> 72 (sectors d orientacio de 10 a 5 graus): amb 10 graus el closed set fusionava poses prou diferents i descartava sortides que existien (estret passava de 5/16 a 16/16). Recorreguts revalidats un a un amb freeAt contra tots els altres cotxes aparcats.",
  "bateria": {
   "cols": 300,
   "rows": 180,
@@ -13,137 +13,142 @@
    {
     "i": 0,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 0,
+    "len": 11.22
    },
    {
     "i": 1,
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 1,
-    "len": 10.77
+    "len": 9.34
    },
    {
     "i": 2,
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 0,
-    "len": 15.51
+    "len": 15.18
    },
    {
     "i": 3,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 3,
-    "len": 20.1
+    "man": 1,
+    "len": 16.82
    },
    {
     "i": 4,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 26.49
+    "man": 0,
+    "len": 19.06
    },
    {
     "i": 5,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 3,
-    "len": 24.72
+    "man": 1,
+    "len": 19.35
    },
    {
     "i": 6,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 5,
-    "len": 46.37
+    "man": 0,
+    "len": 22.77
    },
    {
     "i": 7,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 20.78
    },
    {
     "i": 8,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 29.9
+    "man": 3,
+    "len": 27.36
    },
    {
     "i": 9,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 3,
-    "len": 29.45
+    "man": 1,
+    "len": 24.3
    },
    {
     "i": 10,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 38.37
+    "man": 0,
+    "len": 30.36
    },
    {
     "i": 11,
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 3,
-    "len": 33.63
+    "len": 28.9
    },
    {
     "i": 12,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 3,
+    "len": 32.09
    },
    {
     "i": 13,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 29.25
    },
    {
     "i": 14,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 41.12
+    "man": 3,
+    "len": 34.18
    },
    {
     "i": 15,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 3,
-    "len": 38.03
+    "man": 1,
+    "len": 31.23
    },
    {
     "i": 16,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 48.93
+    "man": 3,
+    "len": 37.04
    },
    {
     "i": 17,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 34.75
    },
    {
     "i": 18,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 0,
-    "len": 42.9
+    "man": 3,
+    "len": 39.35
    },
    {
     "i": 19,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 3,
-    "len": 42.1
+    "man": 1,
+    "len": 37.72
    }
   ]
  },
@@ -157,40 +162,42 @@
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 0,
-    "len": 20.46
+    "len": 20.38
    },
    {
     "i": 1,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 28.7
    },
    {
     "i": 2,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 3,
+    "len": 36.54
    },
    {
     "i": 3,
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 3,
-    "len": 36.49
+    "len": 31.32
    },
    {
     "i": 4,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 0,
-    "len": 12.54
+    "man": 1,
+    "len": 14.21
    },
    {
     "i": 5,
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 1,
-    "len": 24.08
+    "len": 20.78
    }
   ]
  },
@@ -211,94 +218,105 @@
     "model": "Compacte (genèric)",
     "ok": true,
     "man": 1,
-    "len": 11.1
+    "len": 8.9
    },
    {
     "i": 2,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 4,
+    "len": 25.86
    },
    {
     "i": 3,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 23.41
+    "man": 3,
+    "len": 18.23
    },
    {
     "i": 4,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 23.12
    },
    {
     "i": 5,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 5,
+    "len": 22.83
    },
    {
     "i": 6,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 26.2
    },
    {
     "i": 7,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 5,
+    "len": 25.25
    },
    {
     "i": 8,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 4,
+    "len": 35.63
    },
    {
     "i": 9,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 4,
-    "len": 35.82
+    "man": 5,
+    "len": 28.55
    },
    {
     "i": 10,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 34.25
    },
    {
     "i": 11,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 3,
+    "len": 30.11
    },
    {
     "i": 12,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 3,
+    "len": 40.78
    },
    {
     "i": 13,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 5,
+    "len": 32.73
    },
    {
     "i": 14,
     "model": "Compacte (genèric)",
     "ok": true,
-    "man": 2,
-    "len": 39.08
+    "man": 0,
+    "len": 35.56
    },
    {
     "i": 15,
     "model": "Compacte (genèric)",
-    "ok": false,
-    "kind": "blocked"
+    "ok": true,
+    "man": 1,
+    "len": 30.9
    }
   ]
  },

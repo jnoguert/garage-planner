@@ -24,7 +24,7 @@ ES nadius servits tal qual.
 npm test
 ```
 
-`node --test`, sense framework ni dependencies. Uns 56 tests en ~3 s,
+`node --test`, sense framework ni dependencies. Uns 57 tests en ~7 s,
 inclosos tres de regressio per a bugs reals que hem trobat al planificador
 (vegeu `test/planner-regression.test.js`):
 
@@ -43,11 +43,33 @@ inclosos tres de regressio per a bugs reals que hem trobat al planificador
   per sobre, no nomes l'aterratge final.
 
 Un test queda marcat `todo` a proposit: la resolucio de cerca actual
-(bins de 0,15 m, 36 sectors, 7 angles de direccio) va reduir molt la
+(bins de 0,15 m, 72 sectors, 7 angles de direccio) va reduir molt la
 no-monotonia pero no la va eliminar del tot al preset "estret" — i pot
 aparèixer en qualsevol altre preset o planta si l'atzar de la geometria hi
 cau just al mig (es el mateix mecanisme, no un bug nou). Es un bug obert,
 documentat en comptes d'amagat.
+
+### La resolucio angular de la cerca (NTH)
+
+El closed set del Hybrid A* indexa (x, y, angle) i durant molt de temps va
+fer servir 36 sectors d'orientacio (10 graus). Era la causa principal del
+symptoma mes molest de tots: "aquest cotxe hi cap perfectament i el
+simulador diu que no". Dues poses amb el mateix bin x/y pero 9 graus de
+diferencia es consideraven el MATEIX estat, i la cerca es quedava nomes la
+mes barata — encara que fos justament la que despres no podia continuar.
+
+Mesurat al preset "estret" (16 cotxes en un passadis just):
+
+| sectors | surten | movent un cotxe +-2 cm | suite |
+|---|---|---|---|
+| 36 (10 graus) | 5/16 | balla entre 5 i 6 | 3,4 s |
+| **72 (5 graus)** | **16/16** | estable | 7,3 s |
+| 144 (2,5 graus) | 16/16 | estable | 20,5 s |
+
+72 es on s'acaba el guany. El cercador es determinista (mateixa entrada,
+mateixa sortida — comprovat), pero amb 36 sectors era tan sensible que
+moure un cotxe 1 cm canviava el veredicte, i des de fora aixo sembla
+exactament que no ho sigui.
 
 ## Estructura
 
@@ -148,9 +170,19 @@ centre: es pinta l'empremta escombrada pel cotxe SENCER (L x W, morro i cul
 inclosos) — la unio del seu rectangle a cada pose. En girar, el morro
 escombra molt mes enfora que el punt mig, i es justament el que frega les
 cantonades; una cinta de l'amplada al voltant del centre no ho ensenyava.
-Tots els rectangles van a un sol path i s'omplen d'una tirada: amb un fill
-per pose, els centenars de rectangles superposats acumulen tinta fins a
-quedar opacs; amb un de sol, la regla "nonzero" els fusiona.
+Els rectangles van a un sol path i s'omplen d'una tirada: amb un fill per
+pose, els centenars de rectangles superposats acumulen tinta fins a quedar
+opacs; amb un de sol, la regla "nonzero" els fusiona. Es fa dos cops, un per
+marxa, perque l'empremta va de color segons com hi passa el cotxe: **blau
+endavant i groc marxa enrere** (`--fwd` / `--rev`), tant a l'empremta com al
+traç del centre.
+
+L'animacio va en bucle, amb una pausa a cada volta. Abans es reproduia un sol
+cop i, si miraves un altre punt de la pantalla, t'ho perdies; i amb
+"prefers-reduced-motion" (activat per defecte a molts PC amb Windows sense
+que ningu ho hagi triat) durava 450 ms, un parpelleig. Amb moviment reduit
+ara es fa mes lenta i sense bucle — que es el que la preferencia demana de
+debo, menys moviment sobtat, no invisible.
 
 Els cotxes amb diagnostic `blocked` tambe son clicables: ensenyen **en
 vermell** el recorregut que haurien fet si estiguessin sols i una creu al

@@ -12,7 +12,21 @@ import { specOf } from "./vehicle.js";
    `goalType`/`targetType`, cal acceptar tambe GATE. */
 function isGoalCell(cellValue, goalType) { return cellValue === goalType || cellValue === GATE; }
 
-export const NTH = 36;          // sectors d'orientacio (10 graus)
+/* Sectors d'orientacio del closed set. Va ser 36 (10 graus) molt de temps i
+   era la causa principal dels "aquest cotxe hi cap i em diu que no": dues
+   poses amb el mateix bin x/y pero 9 graus de diferencia es consideraven el
+   mateix estat, i la cerca es quedava la mes barata de les dues encara que
+   fos justament la que despres no podia continuar. Mesurat al preset
+   "estret" (16 cotxes en un passadis just):
+
+     NTH=36 (10 graus) -> 5/16 surten, i movent un cotxe 1 cm en surten 6
+     NTH=72  (5 graus) -> 16/16 surten, estable movent-lo +-2 cm
+     NTH=144 (2,5 graus) -> igual que 72, pero la suite passa de 7 s a 20 s
+
+   72 es on s'acaba el guany: dobla el temps de cerca i a canvi deixa de
+   descartar sortides que existeixen. La cerca segueix essent incompleta
+   (bug 2 al README) — nomes passa molt menys sovint. */
+export const NTH = 72;          // sectors d'orientacio (5 graus)
 export const XYBIN = 0.15;      // resolucio de la cerca en planta (m)
 export const STEP = 0.22;       // metres per pas d'arc
 export const GEAR_COST = 1.2;   // penalitzacio per canvi de marxa

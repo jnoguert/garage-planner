@@ -365,38 +365,56 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
 
   if (play?.path) {
     const v = specOf(cars.find((c) => c.id === play.id) || {});
-    const hw = v.W / 2;
-    const routeVar = play.fail ? "--red" : "--route";
+    const hw = v.W / 2, hl = v.L / 2;
     const pts = play.path.map((p) => centreFromRear(p.x, p.y, p.th, v));
+    // El pas 0 es la sortida, encara sense marxa (DIR=0): compta com endavant.
+    const isRev = (i) => play.path[i].dir < 0;
 
     /* L'empremta escombrada: el cotxe SENCER (L x W, morro i cul inclosos),
        no una cinta de l'amplada al voltant del centre — en girar, el morro
        escombra molt mes enfora que el punt mig, i es justament el que frega
        les cantonades. Es la unio del rectangle a cada pose.
 
-       Tots els rectangles van a UN sol path i s'omplen d'una tirada: amb un
-       fill per rectangle, els centenars de poses se superposen i la tinta
-       s'acumula fins a quedar opac. Amb un sol fill, la regla "nonzero" els
-       fusiona i la unio queda d'un to uniforme. */
-    ctx.fillStyle = cssRgba(routeVar, .16);
-    ctx.beginPath();
-    for (let i = 0; i < play.path.length; i++) {
-      const p = play.path[i], c = pts[i];
-      const co = Math.cos(p.th), si = Math.sin(p.th), hl = v.L / 2;
-      // cantonades: centre +- (hl al llarg) +- (hw de costat)
-      const ax = co * hl, ay = si * hl, bx = -si * hw, by = co * hw;
-      ctx.moveTo(px(c.cx + ax + bx), py(c.cy + ay + by));
-      ctx.lineTo(px(c.cx + ax - bx), py(c.cy + ay - by));
-      ctx.lineTo(px(c.cx - ax - bx), py(c.cy - ay - by));
-      ctx.lineTo(px(c.cx - ax + bx), py(c.cy - ay + by));
-      ctx.closePath();
+       Un sol path i un sol fill PER MARXA: amb un fill per rectangle, els
+       centenars de poses se superposen i la tinta s'acumula fins a quedar
+       opac; amb un de sol, la regla "nonzero" els fusiona i la unio queda
+       d'un to uniforme. Dos passades (endavant i enrere) i no una de sola
+       perque van de colors diferents. */
+    for (const rev of [false, true]) {
+      ctx.fillStyle = cssRgba(rev ? "--rev" : "--fwd", .17);
+      ctx.beginPath();
+      let any = false;
+      for (let i = 0; i < play.path.length; i++) {
+        if (isRev(i) !== rev) continue;
+        any = true;
+        const p = play.path[i], c = pts[i];
+        const co = Math.cos(p.th), si = Math.sin(p.th);
+        // cantonades: centre +- (hl al llarg) +- (hw de costat)
+        const ax = co * hl, ay = si * hl, bx = -si * hw, by = co * hw;
+        ctx.moveTo(px(c.cx + ax + bx), py(c.cy + ay + by));
+        ctx.lineTo(px(c.cx + ax - bx), py(c.cy + ay - by));
+        ctx.lineTo(px(c.cx - ax - bx), py(c.cy - ay - by));
+        ctx.lineTo(px(c.cx - ax + bx), py(c.cy - ay + by));
+        ctx.closePath();
+      }
+      if (any) ctx.fill();
     }
-    ctx.fill();
 
-    ctx.strokeStyle = css(routeVar); ctx.lineWidth = Math.max(1.6, view.s * 0.09);
-    ctx.globalAlpha = .85; ctx.beginPath();
-    pts.forEach((p, i) => (i ? ctx.lineTo(px(p.cx), py(p.cy)) : ctx.moveTo(px(p.cx), py(p.cy))));
-    ctx.stroke(); ctx.globalAlpha = 1;
+    // El traç del centre, tram a tram segons la marxa: blau endavant, groc
+    // enrere. Cada tram es pinta amb la marxa del seu punt d'arribada, que
+    // es la que el cotxe hi porta mentre el recorre.
+    ctx.lineWidth = Math.max(1.6, view.s * 0.09); ctx.globalAlpha = .9;
+    for (const rev of [false, true]) {
+      ctx.strokeStyle = css(rev ? "--rev" : "--fwd");
+      ctx.beginPath();
+      for (let i = 1; i < pts.length; i++) {
+        if (isRev(i) !== rev) continue;
+        ctx.moveTo(px(pts[i - 1].cx), py(pts[i - 1].cy));
+        ctx.lineTo(px(pts[i].cx), py(pts[i].cy));
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
 
   const hidden = new Set();

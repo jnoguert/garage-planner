@@ -68,19 +68,21 @@ for (const name of ["bateria", "estret", "tandem"]) {
 
 /* El closed set de plan() tambe ha de ser Float64Array, pel mateix motiu. Aqui
    el float32 NO es manifesta com un penjament sino com a resultats PITJORS: al
-   preset "tandem", amb Float32Array en surten 3 de 6 en comptes de 5 de 6.
-   Mesurat. Per tant el que el guarda es el resultat, no el comptador. */
+   preset "tandem" en fa sortir menys dels que hi caben. Per tant el que el
+   guarda es el resultat, no el comptador. */
 test("bug 1: el closed set no degrada el resultat (tandem)", async () => {
-  // tandem te 2 cotxes (dels 6) genuinament "blocked" — els tapen uns altres
-  // aparcats al davant, no es cap fallada de cerca (vegeu evacuation.test.js).
-  // Amb el closed set en float32 aquest resultat es degradava de debo: menys
-  // cotxes sortien i els "blocked" passaven a "geometry"/"budget" (la cerca,
-  // no la geometria, fallava). Aixo es el que aquest test vigila.
+  /* Amb el closed set en float32 l'arrodoniment supera l'epsilon de
+     comparacio i la cerca es degrada: surten menys cotxes dels que poden.
+     Aixo es el que vigila aquest test.
+
+     Assercio: han de sortir-ne TOTS. Es el maxim possible, o sigui que no es
+     una xifra que calgui anar retocant cada cop que el cercador millora
+     (abans hi deia "4 dels 6" i va quedar obsoleta en pujar NTH a 72); en
+     canvi qualsevol degradacio de la cerca la trenca de seguida. */
   const { world, cars } = presets.tandem();
   const r = await evacuate(world, cars, OPTS);
-  assert.equal(r.out.length, 4, "tandem ha de treure 4 dels 6 cotxes");
-  assert.equal(r.stuck.length, 2, "els altres 2 haurien de quedar blocked, no perduts per la cerca");
-  for (const id of r.stuck) assert.equal(r.diag[id]?.kind, "blocked", `cotxe ${id}: hauria de ser "blocked", no una fallada de cerca`);
+  assert.equal(r.out.length, cars.length, "tandem: tots els cotxes hi caben, no se n'ha de perdre cap per la cerca");
+  assert.equal(r.stuck.length, 0);
 });
 
 /* ================================================================ BUG 2 ====
@@ -126,13 +128,16 @@ for (const name of ["garatge", "garatge3", "tandem"]) {
 
 /* ⚠ BUG OBERT, no una regressio.
 
-   El pas a bins de 0,15 m / 36 sectors / 7 angles va reduir molt aquest
-   problema, pero NO el va eliminar: el preset "estret" encara el dona. Mesurat
-   sobre aquest codi:
+   Els bins de 0,15 m i el pas de 36 a 72 sectors (10 -> 5 graus) han reduit
+   molt aquest problema, pero NO l'han eliminat: el preset "estret" encara el
+   dona. Amb 36 sectors hi havia 4 violacions i nomes en sortien 5 dels 16
+   cotxes; amb 72 en surten 16 de 16 i queden 3 violacions, totes a marges
+   grans (0,20 en amunt), alla on el passadis ja va tan just que un parell de
+   centimetres decideixen:
 
-     estret cotxe 0:  0.10 SURT / 0.15 SURT / 0.20 SURT / 0.25 no /
-                      0.30 SURT / 0.35 no / 0.40 SURT
-     estret cotxe 15: 0.10 SURT / 0.15 no / 0.20 SURT / 0.25 no / 0.30 SURT / ...
+     estret cotxe 3:  marge 0.20 no SURT / 0.25 SURT
+     estret cotxe 6:  marge 0.30 no SURT / 0.35 SURT
+     estret cotxe 12: marge 0.35 no SURT / 0.40 SURT
 
    Els fracassos son "noroute" amb ~1400 expansions, contra ~2800 quan te exit:
    la cua s'ha buidat d'hora. Amb el pressupost intacte i una ruta que existeix

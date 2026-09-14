@@ -79,13 +79,20 @@ test("arrive(): sense cap ENTRANCE dibuixada, cap cotxe hi pot entrar", async ()
    combina be els dos sentits per separat — no n'hi ha prou amb "ok" en un
    dels dos. */
 test("checkBothWays(): un cotxe pot entrar-hi pero no sortir-ne, i cap dels dos compta com a accessible", async () => {
+  /* Passadis amb MURS de veritat a dalt i a baix. Abans era tot calçada i
+     la vora del mon feia de paret imaginaria: com que el cos del cotxe si
+     que pot sobresortir del dibuix (fora hi ha "el carrer", vegeu freeAt),
+     A podia esquivar B per fora i la asimetria que aquest test vol provar
+     desapareixia tan bon punt el cercador va millorar. Amb parets, B tapa
+     el pas de debo. */
   const world = newWorldM(14, 7);
-  fillRectM(world, 0, 0, 14, 7, ASPH);
+  fillRectM(world, 0, 0, 14, 7, 0);              // VOID: tot mur
+  fillRectM(world, 0, 0.5, 14, 6.5, ASPH);       // passadis de 6 m
   fillRectM(world, 0, 2.5, 1, 4.5, ENTRANCE);
   fillRectM(world, 13, 2.5, 14, 4.5, EXIT);
   const cars = makeCars();
   const a = cars.addM(6, 3.5, 0, 1);
-  const b = cars.addM(9.6, 3.5, 90, 1);
+  const b = cars.addM(9.6, 3.5, 90, 1);          // travessat, tapa el pas cap a la sortida
 
   const [ex, en] = await Promise.all([evacuate(world, cars, OPTS), arrive(world, cars, OPTS)]);
   assert.equal(ex.out.some((o) => o.id === a.id), false, "A: sortida hauria de fallar (B li tapa el pas)");
