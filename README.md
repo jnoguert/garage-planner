@@ -1,22 +1,25 @@
 # garage-planner
 
-Simulador de sortida d'aparcament. Dibuixes una planta (parets, places,
-sortides) en una graella de 10 cm, hi col·loques cotxes amb mides i angles de
-gir reals, i el motor calcula si cada cotxe pot arribar a la sortida — sol o
-amb altres cotxes pel mig — fent marxa enrere si cal, amb col·lisio exacta
-contra parets i altres cotxes.
+A parking exit simulator. You draw a floor plan (walls, bays, exits) on a 10 cm
+grid, place cars with real dimensions and real steering limits, and the engine
+works out whether each car can reach the exit — on its own or with other cars in
+the way — reversing if it has to, with exact collision against walls and against
+the other cars.
 
-Lloc estatic, sense backend. Prova'l a
+A static site, no backend. Try it at
 **https://jnoguert.github.io/garage-planner/**.
 
-## Fer-ho anar en local
+Contributions are welcome — see [Contributing](#contributing) and
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Running it locally
 
 ```bash
-python -m http.server 8000
+npm run dev     # or: python -m http.server 8000
 ```
 
-i obre `http://localhost:8000/`. No cal build ni instal·lar res: son moduls
-ES nadius servits tal qual.
+then open `http://localhost:8000/`. There is no build step and nothing to
+install: these are native ES modules served as they are.
 
 ## Tests
 
@@ -24,242 +27,263 @@ ES nadius servits tal qual.
 npm test
 ```
 
-`node --test`, sense framework ni dependencies. Uns 57 tests en ~7 s,
-inclosos tres de regressio per a bugs reals que hem trobat al planificador
-(vegeu `test/planner-regression.test.js`):
+`node --test`, no framework and no dependencies. About 57 tests in ~7 s,
+including three regression tests for real bugs found in the planner (see
+`test/planner-regression.test.js`):
 
-- **Precisio de coma flotant**: el camp de distancies a la sortida i el
-  closed set del Hybrid A* han de fer servir `Float64Array`. Amb
-  `Float32Array` l'arrodoniment supera l'epsilon de comparacio i la cua de
-  cerca no es buida mai.
-- **Monotonia del marge de seguretat**: un marge mes gran no pot facilitar
-  mai la sortida — si es dona el cas, es sempre un bug del cercador (la
-  discretitzacio de l'espai x/y/angle), mai de la geometria.
-- **Zones d'entrada/sortida mes primes que un pas d'arc (STEP=0,22 m)**: el
-  cotxe hi passava fisicament pero el cercador saltava per sobre sense
-  aterrar-hi mai a dins de cap dels dos costats del salt. `plan()` ara
-  comprova (`subGoalPose`, nomes quan l'heuristica ja diu que som a prop, per
-  no multiplicar per 4 el temps de cerca sencer) si el TRAM sencer hi passa
-  per sobre, no nomes l'aterratge final.
+- **Floating-point precision**: the distance-to-exit field and the closed set of
+  the Hybrid A* have to use `Float64Array`. With `Float32Array` the rounding
+  exceeds the comparison epsilon and the search queue never empties.
+- **Safety-margin monotonicity**: a larger margin can never make leaving easier
+  — if that happens it is always a bug in the search (the discretisation of
+  x/y/angle space), never in the geometry.
+- **Entrance/exit zones thinner than one arc step (STEP=0.22 m)**: the car
+  physically passed through, but the search jumped over it, landing inside
+  neither side of the jump. `plan()` now checks (`subGoalPose`, only once the
+  heuristic says we are close, so as not to quadruple the whole search time)
+  whether the WHOLE step passes over it, not just the final landing point.
 
-Un test queda marcat `todo` a proposit: la resolucio de cerca actual
-(bins de 0,15 m, 72 sectors, 7 angles de direccio) va reduir molt la
-no-monotonia pero no la va eliminar del tot al preset "estret" — i pot
-aparèixer en qualsevol altre preset o planta si l'atzar de la geometria hi
-cau just al mig (es el mateix mecanisme, no un bug nou). Es un bug obert,
-documentat en comptes d'amagat.
+One test is deliberately marked `todo`: the current search resolution (0.15 m
+bins, 72 sectors, 7 steering angles) greatly reduced the non-monotonicity but
+did not eliminate it on the "narrow" preset — and it can show up on any other
+preset or floor plan if the geometry happens to fall just right (it is the same
+mechanism, not a new bug). It is an open bug, documented rather than hidden.
+**This is the best-understood open problem in the project; see
+[CONTRIBUTING.md](CONTRIBUTING.md) if you want to take it on.**
 
-### La resolucio angular de la cerca (NTH)
+### The angular resolution of the search (NTH)
 
-El closed set del Hybrid A* indexa (x, y, angle) i durant molt de temps va
-fer servir 36 sectors d'orientacio (10 graus). Era la causa principal del
-symptoma mes molest de tots: "aquest cotxe hi cap perfectament i el
-simulador diu que no". Dues poses amb el mateix bin x/y pero 9 graus de
-diferencia es consideraven el MATEIX estat, i la cerca es quedava nomes la
-mes barata — encara que fos justament la que despres no podia continuar.
+The closed set of the Hybrid A* indexes (x, y, angle) and for a long time used
+36 orientation sectors (10 degrees). That was the main cause of the most
+annoying symptom of all: "this car fits perfectly and the simulator says it does
+not". Two poses in the same x/y bin but 9 degrees apart counted as the SAME
+state, and the search kept only the cheaper one — even when that was precisely
+the one that could not continue.
 
-Mesurat al preset "estret" (16 cotxes en un passadis just):
+Measured on the "narrow" preset (16 cars in a tight aisle):
 
-| sectors | surten | movent un cotxe +-2 cm | suite |
+| sectors | get out | moving one car +-2 cm | suite |
 |---|---|---|---|
-| 36 (10 graus) | 5/16 | balla entre 5 i 6 | 3,4 s |
-| **72 (5 graus)** | **16/16** | estable | 7,3 s |
-| 144 (2,5 graus) | 16/16 | estable | 20,5 s |
+| 36 (10 degrees) | 5/16 | flips between 5 and 6 | 3.4 s |
+| **72 (5 degrees)** | **16/16** | stable | 7.3 s |
+| 144 (2.5 degrees) | 16/16 | stable | 20.5 s |
 
-72 es on s'acaba el guany. El cercador es determinista (mateixa entrada,
-mateixa sortida — comprovat), pero amb 36 sectors era tan sensible que
-moure un cotxe 1 cm canviava el veredicte, i des de fora aixo sembla
-exactament que no ho sigui.
+72 is where the gain runs out. The search is deterministic (same input, same
+output — verified), but with 36 sectors it was so sensitive that moving a car by
+1 cm changed the verdict, and from the outside that looks exactly like
+non-determinism.
 
-## Estructura
+## Layout
 
 ```
-src/geometry.js   colisions (OBB-OBB, segment-OBB, cel·la-OBB), camp de
-                  distancies, cua de prioritat — sense DOM
-src/vehicle.js    biblioteca de vehicles -> Rc (radi de gir) i angle maxim
-src/planner.js    Hybrid A*, heuristica i evacuacio per rondes
-src/scene.js      el "world" (graella+segments+cotxes) i els 6 presets
-src/render.js     tot el dibuix a canvas
-src/app.js        cablejat del DOM: events, panells, animacio
-src/storage.js    desar/carregar garatges a localStorage, per navegador
-data/fleet.json   dades de vehicles curades a ma
+src/geometry.js   collisions (OBB-OBB, segment-OBB, cell-OBB), distance field,
+                  priority queue — no DOM
+src/vehicle.js    vehicle library -> Rc (turning radius) and maximum steering angle
+src/planner.js    Hybrid A*, heuristic and evacuation
+src/scene.js      the "world" (grid+segments+cars) and the 6 presets
+src/render.js     all the canvas drawing
+src/app.js        DOM wiring: events, panels, animation
+src/storage.js    saving/loading garages in localStorage, per browser
+data/fleet.json   hand-curated vehicle data
 test/             node --test
-tools/            scripts Python (biblioteca estandard, sense dependencies)
-legacy/           el prototip original d'un sol fitxer, com a referencia
+tools/            Python scripts (standard library, no dependencies)
+legacy/           the original single-file prototype, as a reference
 ```
 
-`src/*.js` no toca mai el DOM excepte `app.js` i `render.js`: tota la
-geometria, el planificador i l'escena es poden provar amb Node sense
-navegador.
+`src/*.js` never touches the DOM except in `app.js` and `render.js`: all the
+geometry, the planner and the scene can be tested under Node with no browser.
 
-### Dibuix
+### Drawing
 
-Un llapis per material (calçada/plaça/mur-pilar/entrada/sortida/cotxe) i una
-goma universal: si hi ha un cotxe sota el cursor l'esborra, si no converteix
-la cel·la en calçada oberta. "Entrada" (`ENTRANCE` a `geometry.js`) es
-transitable com qualsevol altra cel·la per a la col·lisio, pero te sentit
-propi al planificador: es l'objectiu del mode "Entrada" (vegeu mes avall).
-Els murs que dibuixes queden acotats en metres (render.js,
-`wallBoundaryRuns`), igual que els segments exactes d'un plànol importat.
+One pen per material (roadway/bay/wall-pillar/entrance/exit/car) and a universal
+eraser: if there is a car under the cursor it removes it, otherwise it turns the
+cell into open roadway. "Entrance" (`ENTRANCE` in `geometry.js`) is drivable like
+any other cell as far as collision goes, but it has its own meaning to the
+planner: it is the goal of "Entry" mode (see below). Walls you draw are labelled
+in metres (render.js, `wallBoundaryRuns`), just like the exact segments of an
+imported floor plan.
 
-L'eina "Línia recta" dibuixa parets (VOID) horitzontals o verticals nomes —
-s'arrossega des de l'extrem que quedara FIX i es projecta sobre l'eix (X o
-Y) que hagi recorregut mes. Es guarden a `world.lines` (scene.js), a
-diferencia de la resta del dibuix a ma: aixo permet fer doble clic sobre la
-seva mesura en metres per canviar-ne la llargada (`setLineLength()`),
-mantenint fix el mateix extrem — no cal repintar a ull. Nomes activa amb
-l'eina Línia seleccionada.
+The "Straight line" tool draws horizontal or vertical walls (VOID) only — you
+drag from the end that will stay FIXED and it is projected onto whichever axis
+(X or Y) you travelled further along. These are kept in `world.lines`
+(scene.js), unlike the rest of the freehand drawing: that lets you double-click
+their metre label to change the length (`setLineLength()`), keeping the same end
+fixed, with no repainting by eye. Only active with the Line tool selected.
 
-Els presets d'exemple (bateria/tandem/estret/buit) tenen l'entrada
-immediatament al costat de la sortida, al mateix mur — aixi el mode
-"Entrada" o "Entrada i sortida" funciona sense haver de dibuixar-hi res
-primer.
+The example presets (bays/tandem/narrow/empty) have the entrance immediately
+next to the exit, in the same wall — so "Entry" or "Both ways" mode works without
+having to draw anything first.
 
-### Sortida, entrada, o totes dues
+### Exit, entry, or both
 
-El panell "Què comprova" tria que es simula, sempre en el pitjor cas (tots
-els cotxes aparcats, cadascun a la seva plaça — vegeu la seccio seguent):
+The "What it checks" panel picks what gets simulated, always in the worst case
+(every car parked, each in its own bay — see the next section):
 
-- **Sortida** (`evacuate()`): de la plaça de cada cotxe fins a la sortida
-  mes propera.
-- **Entrada** (`arrive()`): de l'entrada mes propera fins a la plaça de
-  cada cotxe. No es un cercador nou: el model cinematic d'aquest motor es
-  reversible (recorrer un arc endavant amb un angle de volant concret i
-  despres recorrer'l en sentit contrari amb el MATEIX angle torna
-  exactament al punt de partida), aixi que `arrive()` fa la mateixa cerca
-  que `evacuate()` pero cap a `ENTRANCE` en lloc de `EXIT`, i gira el
-  recorregut trobat (`reversePath()`). Cal haver dibuixat una cel·la
-  d'entrada; si no n'hi ha, el simulador ho diu en lloc de fer un calcul
-  que no vol dir res.
-- **Entrada i sortida** (`checkBothWays()`): un cotxe nomes compta com a
-  accessible si pot fer les dues coses; si en falla nomes una, es
-  diagnostica cada sentit per separat (un cotxe pot entrar-hi be i quedar
-  tapat nomes en sortir, o al reves).
+- **Exit** (`evacuate()`): from each car's bay to the nearest exit.
+- **Entry** (`arrive()`): from the nearest entrance to each car's bay. It is not
+  a new search: the kinematic model of this engine is reversible (driving an arc
+  forwards at a given steering angle and then driving it back at the SAME angle
+  returns exactly to the starting point), so `arrive()` runs the same search as
+  `evacuate()` but towards `ENTRANCE` instead of `EXIT`, and reverses the route
+  it finds (`reversePath()`). You need to have drawn an entrance cell; if there
+  is none, the simulator says so instead of computing something meaningless.
+- **Both ways** (`checkBothWays()`): a car only counts as accessible if it can do
+  both; if only one fails, each direction is diagnosed separately (a car can get
+  in fine and only be trapped on the way out, or the other way round).
 
-Si a la teva planta real hi ha una unica porta que fas servir en tots dos
-sentits, l'eina "Entrada i sortida" (`GATE` a `geometry.js`) pinta un sol
-espai que compta com a EXIT i com a ENTRANCE alhora (`isGoalCell()` a
-`planner.js`), en lloc de dues zones separades. Els 4 presets d'exemple
-amb cotxes (bateria/tandem/estret/buit) ja l'usen.
+If your real floor plan has a single door used in both directions, the "Entrance
+and exit" tool (`GATE` in `geometry.js`) paints one space that counts as EXIT
+and as ENTRANCE at once (`isGoalCell()` in `planner.js`), instead of two
+separate zones. The 4 example presets with cars (bays/tandem/narrow/empty)
+already use it.
 
-### Garatges desats i tema
+### Saved garages and theme
 
-"Els teus garatges" desa la planta i els cotxes actuals a `localStorage`
-(`src/storage.js`) sota un nom que tu tries — per navegador, sense backend
-ni sincronitzacio entre dispositius, coherent amb "lloc totalment estatic".
+"Your garages" saves the current floor plan and cars to `localStorage`
+(`src/storage.js`) under a name you choose — per browser, with no backend and no
+syncing between devices, consistent with "a fully static site".
 
-El mode clar/fosc segueix la preferencia del sistema per defecte
-(`@media prefers-color-scheme`) i es pot canviar amb el boto de dalt de tot
-del panell esquerre; la tria explicita es desa i guanya sempre per sobre
-del sistema. El canvas llegeix els colors amb `getComputedStyle` en pintar
-(`render.js`), aixi que els dos temes es mantenen amb les mateixes variables
-CSS, no amb dos dibuixos diferents.
+Light/dark mode follows the system preference by default
+(`@media prefers-color-scheme`) and can be switched with the button at the top of
+the left-hand panel; an explicit choice is saved and always wins over the system.
+The canvas reads the colours with `getComputedStyle` while painting
+(`render.js`), so both themes are maintained with the same CSS variables, not
+with two different drawing paths.
 
-Els presets `garatge`/`garatge3` (la planta real d'un usuari concret, amb
-segments exactes i cotxes reals) ja no tenen boto a la UI — eren massa
-especifics per a una eina d'us general — pero es queden a `scene.js` com a
-fixture dels tests, que ja els feien servir per provar la col·lisio contra
-segments exactes.
+The `garage`/`garage3` presets (one particular user's real floor plan, with exact
+segments and real cars) no longer have a button in the UI — they were too
+specific for a general-purpose tool — but they stay in `scene.js` as a test
+fixture, which already used them to exercise collision against exact segments.
 
-Els resultats de "Comprova les sortides" inclouen el desglossament de
-maniobres de cada cotxe (`summariseManeuvers` a `planner.js`): un tram per
-marxa, amb la distancia i cap a quin costat gira.
+The results of "Check the exits" include a manoeuvre breakdown for each car
+(`summariseManeuvers` in `planner.js`): one run per gear, with the distance and
+which way it turns.
 
-En clicar un cotxe, el recorregut no es dibuixa nomes com una linia pel
-centre: es pinta l'empremta escombrada pel cotxe SENCER (L x W, morro i cul
-inclosos) — la unio del seu rectangle a cada pose. En girar, el morro
-escombra molt mes enfora que el punt mig, i es justament el que frega les
-cantonades; una cinta de l'amplada al voltant del centre no ho ensenyava.
-Els rectangles van a un sol path i s'omplen d'una tirada: amb un fill per
-pose, els centenars de rectangles superposats acumulen tinta fins a quedar
-opacs; amb un de sol, la regla "nonzero" els fusiona. Es fa dos cops, un per
-marxa, perque l'empremta va de color segons com hi passa el cotxe: **blau
-endavant i groc marxa enrere** (`--fwd` / `--rev`), tant a l'empremta com al
-traç del centre.
+When you click a car, the route is not drawn as a line through the centre alone:
+it paints the footprint swept by the WHOLE car (L x W, nose and tail included) —
+the union of its rectangle at every pose. When turning, the nose sweeps much
+further out than the midpoint, and that is exactly what clips the corners; a
+ribbon of the car's width around the centre did not show it. The rectangles go
+into a single path and are filled in one go: with one fill per pose, hundreds of
+overlapping rectangles accumulate ink until they go opaque; with a single one,
+the "nonzero" rule merges them. It is done twice, once per gear, because the
+footprint is coloured by how the car goes through: **blue forward and yellow in
+reverse** (`--fwd` / `--rev`), both in the footprint and in the centreline
+stroke.
 
-L'animacio va en bucle, amb una pausa a cada volta. Abans es reproduia un sol
-cop i, si miraves un altre punt de la pantalla, t'ho perdies; i amb
-"prefers-reduced-motion" (activat per defecte a molts PC amb Windows sense
-que ningu ho hagi triat) durava 450 ms, un parpelleig. Amb moviment reduit
-ara es fa mes lenta i sense bucle — que es el que la preferencia demana de
-debo, menys moviment sobtat, no invisible.
+The animation loops, with a pause each lap. It used to play once and, if you
+were looking somewhere else on the screen, you missed it; and with
+"prefers-reduced-motion" (on by default on many Windows PCs without anyone
+having chosen it) it lasted 450 ms, a blink. With reduced motion it is now
+slower and non-looping — which is what the preference actually asks for, less
+sudden movement, not invisibility.
 
-Els cotxes amb diagnostic `blocked` tambe son clicables: ensenyen **en
-vermell** el recorregut que haurien fet si estiguessin sols i una creu al
-primer punt on queden barrats per un altre cotxe (`diag[id].path` i
-`diag[id].hitAt`, que `checkDirection` calcula amb el MATEIX marge de
-seguretat de la comprovacio — amb marge 0 un recorregut que frega un cotxe
-a 5 cm amb marge 0,15 no marcava cap punt). El cotxe animat s'atura a la
-creu; l'empremta segueix ensenyant el recorregut sencer, per veure si
-l'hauria acabat fent.
+Cars diagnosed as `blocked` are clickable too: they show **in red** the route
+they would have taken on their own and a cross at the first point where another
+car blocks them (`diag[id].path` and `diag[id].hitAt`, which `checkDirection`
+computes with the SAME safety margin as the check — with margin 0, a route that
+grazes a car by 5 cm at margin 0.15 marked no point at all). The animated car
+stops at the cross; the footprint keeps showing the whole route, so you can see
+whether it would have ended up using it.
 
-`blocked` nomes es diu quan s'ha comprovat. Abans n'hi havia prou amb "sol
-si, acompanyat no" per acusar els altres cotxes, i aixo no es el mateix:
-el cercador pot fallar amb mes obstacles al mapa encara que cap no li barri
-el pas (els bins de XYBIN/NTH col·lapsen poses diferents i en poden
-descartar una que feia falta despres). Ara `checkDirection` recorre el cami
-que faria sol pose a pose amb tots els altres aparcats; si no hi ha cap punt
-barrat, aquell cami JA ES una sortida valida (mateixa comprovacio que fa el
-cercador) i s'aprofita en comptes de donar el cotxe per atrapat. Es una
-xarxa de seguretat sobre una cerca incompleta, no la cura del bug 2.
+`blocked` is only said once it has been checked. It used to be enough for "alone
+yes, together no" to blame the other cars, and that is not the same thing: the
+search can fail with more obstacles on the map even when none of them is in the
+way (the XYBIN/NTH bins collapse distinct poses and can discard one that was
+needed later). `checkDirection` now walks the route the car would take alone,
+pose by pose, with all the others parked; if no point is blocked, that route ALREADY
+IS a valid exit (the same check the search does) and it is used instead of
+writing the car off as trapped. It is a safety net over an incomplete search,
+not a cure for bug 2.
 
-### Dades de vehicles i el gir
+### Vehicle data and turning
 
-Cada entrada de `data/fleet.json` porta un camp `turningMeasure` explicit
-(`diametre-vorera` | `radi-vorera` | `diametre-paret` | `radi-paret`). Una
-xifra de gir sola no es fiable: "radi de gir", "diametre de gir", "vorera a
-vorera" i "paret a paret" es fan servir de manera inconsistent fins i tot
-per la mateixa font sobre el mateix cotxe, i confondre'ls (per exemple
-radi amb diametre, que es 2x) pot capgirar el resultat en un passadis just.
-`src/vehicle.js` llanca si falta aquest camp — no hi ha valor per defecte,
-perque un valor per defecte es exactament com s'hi cola l'error.
+Every entry in `data/fleet.json` carries an explicit `turningMeasure` field
+(`kerb-diameter` | `kerb-radius` | `wall-diameter` | `wall-radius`). A turning
+figure on its own is not trustworthy: "turning radius", "turning diameter",
+"kerb to kerb" and "wall to wall" are used inconsistently even by the same
+source about the same car, and confusing them (radius for diameter, say, which
+is 2x) can flip the result in a tight aisle. `src/vehicle.js` throws if the field
+is missing — there is no default, because a default is exactly how the error
+sneaks in.
 
-No hi ha cap font de dades oberta i fiable per a mides+gir de cotxes
-concrets (vPIC de la NHTSA no publica gir; les fonts europees amb bones
-dades son de pagament i sense API oberta per raspat). Per aixo la font es
-un JSON local curat a ma: un humà ho ha comprovat, no una API.
+There is no open, reliable data source for the dimensions+turning of specific
+cars (NHTSA's vPIC does not publish turning figures; the European sources with
+good data are paid and have no open API to scrape). That is why the source is a
+hand-curated local JSON: a human has checked it, not an API.
 
-`tools/import_plan.py` converteix una llista de segments de paret d'un
-plànol real (CSV `x1,y1,x2,y2` en metres) a crides `mkSeg()` per enganxar a
-un preset de `src/scene.js` — es el que fa falta quan les cotes no cauen a
-la graella (com el garatge real de l'exemple, amb una paret a
-4,15 m).
+`tools/import_plan.py` converts a list of wall segments from a real floor plan
+(CSV `x1,y1,x2,y2` in metres) into `mkSeg()` calls to paste into a preset in
+`src/scene.js` — which is what you need when the dimensions do not land on the
+grid (like the real garage in the example, with a wall at 4.15 m).
 
-## Despleg
+## Deployment
 
-GitHub Pages, *Deploy from a branch* (`main` / `/ (root)`) — sense build,
-totes les rutes son relatives, aixi que funcionen igual a l'arrel que dins
-de `/garage-planner/`.
+GitHub Pages, *Deploy from a branch* (`main` / `/ (root)`) — no build, and every
+path is relative, so it works the same at the root as inside `/garage-planner/`.
 
-## Que comprova i que no
+## What it checks and what it does not
 
-- Cada cotxe es modela com un rectangle amb direccio a les rodes davanteres
-  (model de bicicleta cinematica). La trajectoria de sortida es busca amb
-  maniobres endavant i enrere; si no n'hi ha cap de valida, el cotxe queda
-  marcat.
-- Cada cotxe es comprova **de manera independent**, amb tots els altres
-  aparcats exactament on son ara — mai se suposa que algun altre ja ha
-  marxat per fer-li lloc (vegeu `evacuate()` a `planner.js`). Si un cotxe
-  nomes podria sortir despres que un altre es tragues primer, queda marcat
-  com a sense sortida (`blocked`), encara que aquell altre si que pugui
-  sortir. No es comprova el transit simultani, les cues, els encreuaments
-  ni les preferencies de pas.
-- La col·lisio es exacta: rectangle contra rectangle per als cotxes i
-  rectangle contra segment per a les parets del planol importat. Les
-  parets que dibuixes a ma, en canvi, son cel·les de 10 cm i queden
-  arrodonides a la graella.
-- Les volades davantera i posterior de cada model son una estimacio: els
-  fabricants publiquen la llargada i la batalla, pero rarament el
-  repartiment.
-- Un cotxe es considera fora quan el centre del **cos** arriba a una
-  cel·la de sortida, no quan ha sortit del tot del recinte.
-- Tot es pla i en 2D: no hi ha rampes, pendents, gàlib en alçada, vorades
-  ni desnivells.
-- No es comprova l'espai per obrir portes, ni l'accessibilitat, ni cap
-  normativa.
-- «Sense sortida» pot voler dir coses diferents, i el simulador les
-  distingeix: tapat pels altres cotxes tal com estan aparcats ara, hi
-  cabria si es traguessin (`blocked`), sense espai per maniobrar encara
-  que fos sol al recinte (`geometry`), pressupost de cerca exhaurit
-  (`budget`), o la posicio inicial ja toca un mur o un altre cotxe, amb
-  marge (`tight`) o sense (`embedded`).
+- Each car is modelled as a rectangle steered at the front wheels (kinematic
+  bicycle model). The exit trajectory is searched for with forward and reverse
+  manoeuvres; if no valid one exists, the car is flagged.
+- Each car is checked **independently**, with all the others parked exactly where
+  they are now — it is never assumed that some other car has already left to make
+  room (see `evacuate()` in `planner.js`). If a car could only get out after
+  another one was moved first, it is flagged as having no exit (`blocked`), even
+  though that other one can indeed get out. Simultaneous traffic, queues,
+  crossings and right of way are not checked.
+- Collision is exact: rectangle against rectangle for cars and rectangle against
+  segment for the walls of an imported floor plan. Walls you draw by hand, on the
+  other hand, are 10 cm cells and get rounded to the grid.
+- The front and rear overhangs of each model are an estimate: manufacturers
+  publish the length and the wheelbase, but rarely the split.
+- A car counts as out when the centre of its **body** reaches an exit cell, not
+  when it has fully left the site.
+- Everything is flat and 2D: no ramps, slopes, headroom, kerbs or level changes.
+- Space to open doors, accessibility and building regulations are not checked.
+- "No exit" can mean different things, and the simulator tells them apart:
+  blocked by the other cars as they are parked now, would fit if they were moved
+  (`blocked`); no room to manoeuvre even alone on the site (`geometry`); search
+  budget exhausted (`budget`); or the starting position already touches a wall or
+  another car, with the margin (`tight`) or without it (`embedded`).
+
+## Contributing
+
+Issues and pull requests are welcome. The short version:
+
+```bash
+git clone https://github.com/jnoguert/garage-planner.git
+cd garage-planner
+npm test          # must be green: 56 pass, 1 todo (the known open bug)
+npm run dev       # http://localhost:8000
+```
+
+There is nothing to install — no dependencies, no build step. You need Node 18+
+(for `node --test` and JSON import attributes) and, optionally, Python 3 for the
+tools and the dev server.
+
+Good places to start:
+
+- **The open monotonicity bug** (`test/planner-regression.test.js`, marked
+  `todo`). The best-understood problem in the project, and the one with the most
+  impact on results.
+- **Vehicle data** (`data/fleet.json`): adding models, with a source and an
+  explicit `turningMeasure`.
+- **The UI**: it is plain HTML/CSS/canvas in `index.html` and `src/render.js`.
+
+Ground rules, in full in [CONTRIBUTING.md](CONTRIBUTING.md):
+
+1. `npm test` stays green. A change in behaviour that moves the baseline
+   (`test/baseline.json`) has to be deliberate and explained in the PR.
+2. The engine (`geometry.js`, `vehicle.js`, `planner.js`, `scene.js`) never
+   touches the DOM, so it stays testable under Node.
+3. No new dependencies, no build step. That constraint is what keeps this a
+   static site anyone can fork and host.
+4. Non-trivial logic leaves one runnable check behind.
+5. Everything in the repository is in English: code, comments, UI, tests and
+   docs.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

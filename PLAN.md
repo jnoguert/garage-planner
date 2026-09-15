@@ -1,357 +1,366 @@
-# Pla de migració — simulador de sortida d'aparcament
+# Migration plan — parking exit simulator
+
+> Historical document. This is the plan that was agreed before the migration
+> from the single-file prototype to the module layout the repository has today,
+> kept because the code comments still refer to the decisions argued here. Some
+> figures were true at the time of writing and have since moved on (notably
+> `NTH`, which went from 36 to 72). The README describes the current state.
 
 ## Context
 
-Hi ha un prototip funcional en un sol fitxer, `legac-engine.html` (1132 línies,
-JS vanilla, canvas 2D). El motor és correcte i s'hi han arreglat dos bugs reals,
-però viu barrejat amb el DOM i el CSS: no es pot provar sense navegador, i
-qualsevol canvi al planificador o a la col·lisió es valida a ull.
+There is a working single-file prototype, `legac-engine.html` (1132 lines,
+vanilla JS, 2D canvas). The engine is correct and two real bugs have been fixed
+in it, but it lives mixed in with the DOM and the CSS: it cannot be tested
+without a browser, and any change to the planner or to the collision is
+validated by eye.
 
-L'objectiu és separar el motor del DOM, posar-hi tests headless que corrin en
-segons (inclosos dos tests de regressió pels bugs ja trobats), publicar-ho com a
-lloc estàtic a GitHub Pages, i deixar la base preparada per afegir-hi després el
-mode de conducció manual.
+The goal is to separate the engine from the DOM, add headless tests that run in
+seconds (including two regression tests for the bugs already found), publish it
+as a static site on GitHub Pages, and leave the base ready for adding the manual
+driving mode later.
 
-**He llegit el fitxer sencer.** El que segueix està verificat contra el codi, no
-contra la descripció del prompt. Les divergències que he trobat estan marcades
-amb ⚠.
+**I have read the whole file.** What follows is verified against the code, not
+against the description in the prompt. The discrepancies I found are marked ⚠.
 
 ---
 
-## Verificació del punt de partida
+## Verifying the starting point
 
-Tot això ho he comprovat al fitxer, no ho he donat per suposat:
+All of this was checked in the file, not taken for granted:
 
-| Peça | On és | Estat |
+| Piece | Where | State |
 |---|---|---|
-| `Ro = L - B - Fo`, `track = W - 0.20`, `Rc = sqrt((D/2)² - B²) - track/2`, `dmax = atan(B/Rc)` | `spec()`, L266-277 | ✅ tal com el prompt diu |
-| `FLEET` amb 4 genèrics + 4 cotxes reals | L254-263 | ✅ |
-| Cel·la 0,5 m contra OBB (SAT) | `cellHitsOBB` L375 | ✅ |
-| Segment exacte contra OBB (Liang-Barsky) | `segHitsOBB` L356 | ✅ |
-| OBB contra OBB (SAT) | `obbHitsOBB` L387 | ✅ |
-| Hybrid A* (x, y, θ), endavant/enrere, `GEAR_COST=1.2`, `REV_COST=0.5` | `plan()` L503 | ✅ |
-| Escalfament Dijkstra en graella | `exitField()` L400 | ✅ |
-| Evacuació per rondes + diagnòstic | `runSim()` L579 | ✅ 5 causes: `blocked`, `geometry`, `embedded`, `tight`, `budget` |
-| **Bug 1 — fix aplicat** | `Float64Array` a L403 i L505 | ✅ ja arreglat al prototip |
-| **Bug 2 — fix aplicat** | `XYBIN=0.15`, `NTH=36`, `STEP=0.22`, 7 angles L530 | ✅ ja arreglat al prototip |
+| `Ro = L - B - Fo`, `track = W - 0.20`, `Rc = sqrt((D/2)² - B²) - track/2`, `dmax = atan(B/Rc)` | `spec()`, L266-277 | ✅ as the prompt says |
+| `FLEET` with 4 generic profiles + 4 real cars | L254-263 | ✅ |
+| 0.5 m cell against OBB (SAT) | `cellHitsOBB` L375 | ✅ |
+| Exact segment against OBB (Liang-Barsky) | `segHitsOBB` L356 | ✅ |
+| OBB against OBB (SAT) | `obbHitsOBB` L387 | ✅ |
+| Hybrid A* (x, y, θ), forward/reverse, `GEAR_COST=1.2`, `REV_COST=0.5` | `plan()` L503 | ✅ |
+| Dijkstra warm-up on the grid | `exitField()` L400 | ✅ |
+| Evacuation in rounds + diagnosis | `runSim()` L579 | ✅ 5 causes: `blocked`, `geometry`, `embedded`, `tight`, `budget` |
+| **Bug 1 — fix applied** | `Float64Array` at L403 and L505 | ✅ already fixed in the prototype |
+| **Bug 2 — fix applied** | `XYBIN=0.15`, `NTH=36`, `STEP=0.22`, 7 angles L530 | ✅ already fixed in the prototype |
 
-Els dos fixos **ja hi són**. El que falta són els tests que impedeixin que tornin
-a entrar.
+Both fixes **are already there**. What is missing are the tests that stop them
+coming back.
 
-### ⚠ Tres coses que no quadren i com les resolc
+### ⚠ Three things that do not add up, and how I resolve them
 
-1. **El fitxer es diu `legac-engine.html`**, no `legacy-engine.html`. El migro
-   a `legacy/legacy-engine.html` (es queda al repo com a referència i com a font
-   de la línia base de la migració).
+1. **The file is called `legac-engine.html`**, not `legacy-engine.html`. I
+   migrate it to `legacy/legacy-engine.html` (it stays in the repo as a
+   reference and as the source of the migration baseline).
 
-2. **Condició de sortida: el codi i el text de la UI no diuen el mateix.**
-   `plan()` L539-540 comprova `cellTypeAt(centreFromRear(...))` — és el **centre
-   geomètric del cotxe**, no el centre de l'eix posterior. El text de "Què
-   comprova i què no" (L206) diu "el centre del seu eix posterior".
-   → **Conservo el comportament del codi** (centre del cos) i corregeixo el text.
-   Canviar-ho mouria el llindar de sortida mig cotxe i invalidaria els resultats
-   que ja has vist. Si volies el de l'eix posterior, digue-m'ho i ho canvio: és
-   una línia, però llavors els resultats de referència canvien.
+2. **Exit condition: the code and the UI text do not say the same thing.**
+   `plan()` L539-540 checks `cellTypeAt(centreFromRear(...))` — that is the
+   **geometric centre of the car**, not the centre of the rear axle. The text of
+   "What it checks and what it does not" (L206) says "the centre of its rear
+   axle".
+   → **I keep the behaviour of the code** (centre of the body) and fix the text.
+   Changing it would move the exit threshold by half a car and invalidate the
+   results you have already seen. If you wanted the rear-axle one, say so and I
+   will change it: it is one line, but then the reference results change.
 
-3. **Epsilon del bug 1: `exitField` fa servir `1e-9` (L412, L419) però el closed
-   set de `plan()` fa servir `1e-6` (L538, L562)**, no `1e-9` als dos com deia el
-   prompt. No afecta el fix (Float64 als dos), però el test de regressió l'escric
-   contra el comportament real, no contra l'epsilon suposat.
+3. **Bug 1 epsilon: `exitField` uses `1e-9` (L412, L419) but the closed set of
+   `plan()` uses `1e-6` (L538, L562)**, not `1e-9` in both as the prompt said.
+   It does not affect the fix (Float64 in both), but I write the regression test
+   against the real behaviour, not against the assumed epsilon.
 
 ---
 
-## Decisions d'eines
+## Tooling decisions
 
-**Sense bundler. Sense Vite. Sense cap dependència.**
+**No bundler. No Vite. No dependencies.**
 
-L'app són mòduls ES nadius servits tal qual. Node 24 ja porta `node --test`. Això
-elimina d'una tacada:
+The app is native ES modules served as they are. Node 24 already ships
+`node --test`. That removes, in one go:
 
-- el pas de build i el `dist/`,
-- **el problema del `base` de Vite**: sense build, totes les rutes són relatives
-  (`./src/app.js`) i funcionen igual a l'arrel que dins de `/garage-planner/`.
-  El bug que et preocupava no pot existir perquè no hi ha cap ruta absoluta.
-- **el workflow d'Actions contra la branca `gh-pages`**: cap dels dos. GitHub
-  Pages → *Deploy from a branch* → `main` / `/ (root)`. Cada push a `main` és
-  viu en ~30 s. Zero fitxers de CI.
+- the build step and `dist/`,
+- **the Vite `base` problem**: with no build, every path is relative
+  (`./src/app.js`) and works the same at the root as inside `/garage-planner/`.
+  The bug you were worried about cannot exist because there is no absolute path.
+- **the Actions workflow against a `gh-pages` branch**: neither of the two.
+  GitHub Pages → *Deploy from a branch* → `main` / `/ (root)`. Every push to
+  `main` is live in ~30 s. Zero CI files.
 
-`package.json` amb zero dependències:
+`package.json` with zero dependencies:
 ```json
 "scripts": { "test": "node --test test/", "dev": "python -m http.server 8000" }
 ```
 
-**JS pla, no TypeScript.** TS obligaria a un pas de compilació just al lloc on
-l'hem tret. Tipus als límits del motor via JSDoc, que l'editor ja entén.
+**Plain JS, not TypeScript.** TS would force a compilation step back into
+exactly the place we removed it from. Types at the engine boundaries via JSDoc,
+which the editor already understands.
 
-### Python: a les eines, no al motor
+### Python: in the tools, not in the engine
 
-Ho vaig mesurar abans de decidir-ho, amb el **mateix** `segHitsOBB` als dos
-llenguatges i el mateix resultat (940000 impactes):
+I measured this before deciding, with the **same** `segHitsOBB` in both
+languages and the same result (940000 hits):
 
-| | crides/s |
+| | calls/s |
 |---|---|
-| Node 24 | 66.700.000 |
-| Python 3.14 | 1.660.000 |
+| Node 24 | 66,700,000 |
+| Python 3.14 | 1,660,000 |
 
-**40× més lent** al bucle calent, i el planificador no és res més que aquest
-bucle: una evacuació de `garatge3` passaria de ~2 s a més d'un minut, i el
-conjunt de tests de "un parell de segons" a minut i mig. A sobre, al navegador
-Python només hi entra via Pyodide (~8 MB de wasm per càrrega de pàgina), damunt
-del 40×. El mode de conducció manual, que ha de recalcular la distància a
-l'obstacle més proper a cada fotograma, seria el més perjudicat.
+**40× slower** in the hot loop, and the planner is nothing but that loop: one
+evacuation of `garage3` would go from ~2 s to over a minute, and the test suite
+from "a couple of seconds" to a minute and a half. On top of that, Python only
+gets into the browser via Pyodide (~8 MB of wasm per page load), on top of the
+40×. The manual driving mode, which has to recompute the distance to the nearest
+obstacle every frame, would suffer most.
 
-Així que el motor i els seus tests es queden en JS, i **Python fa tota la resta**,
-que és on es fa agradable d'escriure:
+So the engine and its tests stay in JS, and **Python does everything else**,
+which is where it is pleasant to write:
 
-- `tools/serve.py` → ja hi és de franc: `python -m http.server` (és el `npm run dev`).
-- `tools/fleet_propose.py` → l'script de proposta de dades de vehicles, quan calgui.
-- `tools/import_plan.py` → convertir mides d'un plànol real a segments `mkSeg`,
-  que ara es fan a mà (vegeu el preset `garatge`, L1044-1046).
-- `tools/baseline.py` no: la línia base l'he de generar executant el motor antic,
-  que és JS. Va amb Node.
+- `tools/serve.py` → already free: `python -m http.server` (that is `npm run dev`).
+- `tools/fleet_propose.py` → the vehicle-data proposal script, if it is ever needed.
+- `tools/import_plan.py` → converting the dimensions of a real floor plan into
+  `mkSeg` segments, which today are written by hand (see the `garage` preset,
+  L1044-1046).
+- `tools/baseline.py` no: the baseline has to be generated by running the old
+  engine, which is JS. That goes with Node.
 
-Sense `requirements.txt` ni entorn virtual: només biblioteca estàndard. Si algun
-script arriba a necessitar una dependència, llavors sí.
+No `requirements.txt` and no virtualenv: standard library only. If some script
+ever does need a dependency, then yes.
 
-<!-- ponytail: sense bundler. Afegir Vite quan calgui una dependència npm al
-     navegador, minificació, o TypeScript. Llavors: base:'/garage-planner/'
-     i workflow d'Actions. Avui res d'això fa falta. -->
+<!-- ponytail: no bundler. Add Vite when an npm dependency is needed in the
+     browser, or minification, or TypeScript. Then: base:'/garage-planner/'
+     and an Actions workflow. Today none of that is needed. -->
 
 ---
 
-## Estructura
+## Layout
 
 ```
-index.html                 ← shell: CSS i marcatge del prototip, <script type=module src=./src/app.js>
-README.md                  ← què és, com passar els tests, com servir-ho, les advertències
+index.html                 ← shell: the prototype's CSS and markup, <script type=module src=./src/app.js>
+README.md                  ← what it is, how to run the tests, how to serve it, the caveats
 .gitignore                 ← node_modules, __pycache__, .venv, .DS_Store, Thumbs.db
-tools/                     ← Python, només biblioteca estàndard
+tools/                     ← Python, standard library only
 src/
   geometry.js              ← mkSeg, segHitsOBB, cellHitsOBB, obbHitsOBB, edt1d, wallField, MinHeap
-  vehicle.js               ← càrrega de fleet.json, spec() i conversions de gir
-  planner.js               ← freeAt, exitField, plan, evacuate  (cap DOM)
-  scene.js                 ← món {cols,rows,grid,segs,cars} + els 6 presets
-  render.js                ← tot el dibuix a canvas
-  app.js                   ← cablejat del DOM, events, progrés async
-data/fleet.json            ← biblioteca de vehicles curada a mà
+  vehicle.js               ← loading fleet.json, spec() and the turning conversions
+  planner.js               ← freeAt, exitField, plan, evacuate  (no DOM)
+  scene.js                 ← world {cols,rows,grid,segs,cars} + the 6 presets
+  render.js                ← all the canvas drawing
+  app.js                   ← DOM wiring, events, async progress
+data/fleet.json            ← hand-curated vehicle library
 test/*.test.js
-legacy/legacy-engine.html  ← el prototip, intacte, com a referència
+legacy/legacy-engine.html  ← the prototype, untouched, as a reference
 ```
 
-Sis mòduls. `evacuate()` va dins de `planner.js` (són 60 línies i és la mateixa
-peça: el solucionador). No hi ha carpeta `core/`, ni `utils/`, ni `index.js`
-que reexporti res.
+Six modules. `evacuate()` goes inside `planner.js` (it is 60 lines and it is the
+same piece: the solver). There is no `core/` folder, no `utils/`, and no
+`index.js` re-exporting anything.
 
-### El refactor de debò: matar els globals
+### The real refactor: killing the globals
 
-Avui `freeAt`, `exitField`, `plan` i `obstaclesFor` llegeixen `S.grid`, `S.cols`,
-`S.rows`, `S.cars`, `S.segs` i `wallCache` del tancament global. Aquest és
-l'únic motiu pel qual el motor no es pot provar sense navegador.
+Today `freeAt`, `exitField`, `plan` and `obstaclesFor` read `S.grid`, `S.cols`,
+`S.rows`, `S.cars`, `S.segs` and `wallCache` from the global closure. That is
+the only reason the engine cannot be tested without a browser.
 
-El canvi és mecànic: passar un objecte `world = {cols, rows, grid, segs}` com a
-primer paràmetre. `wallField(world)` desa la memòria cau a `world._wall`, i els
-mutadors de `scene.js` la buiden. Cap altre canvi de lògica.
+The change is mechanical: pass a `world = {cols, rows, grid, segs}` object as
+the first parameter. `wallField(world)` caches into `world._wall`, and the
+mutators in `scene.js` clear it. No other change of logic.
 
-Dues coses que esborro pel camí:
+Two things I delete along the way:
 
-- **`vcache` (L265-277) fora.** `spec()` és un `sqrt` i un `atan`; no és al bucle
-  calent (`plan()` rep `v` un sol cop). La memòria cau només existia per evitar
-  recalcular després que `readFields()` mutés `FLEET` in situ.
-- ⚠ **`readFields()` (L281) muta l'entrada compartida de `FLEET`.** Avui, editar
-  la llargada al panell canvia *tots* els cotxes d'aquell model alhora. Amb
-  `fleet.json` com a dada de només lectura això deixa de tenir sentit: l'edició
-  manual passa a ser `car.override = {...}`, **només del cotxe seleccionat**.
-  És un canvi de comportament deliberat i és el mínim necessari; l'entrada manual
-  que demanaves es conserva sencera.
+- **`vcache` (L265-277) goes.** `spec()` is one `sqrt` and one `atan`; it is not
+  in the hot loop (`plan()` receives `v` once). The cache only existed to avoid
+  recomputing after `readFields()` mutated `FLEET` in place.
+- ⚠ **`readFields()` (L281) mutates the shared `FLEET` entry.** Today, editing
+  the length in the panel changes *every* car of that model at once. With
+  `fleet.json` as read-only data that stops making sense: hand editing becomes
+  `car.override = {...}`, **for the selected car only**. It is a deliberate
+  behaviour change and it is the minimum necessary; the hand entry you asked for
+  is kept in full.
 
 ---
 
-## Dades de vehicles
+## Vehicle data
 
-**No hi ha millor font que la que descrius.** Ho confirmo, i afegeixo el que he
-descartat perquè no ho donis per bo més endavant:
+**There is no better source than the one you describe.** I confirm that, and add
+what I ruled out so you do not take it up later:
 
-- **NHTSA vPIC** (`vpic.nhtsa.dot.gov`): gratuïta, oficial, sense clau. Però és
-  descodificació de VIN dels EUA i **no publica radi ni diàmetre de gir**. Inútil
-  per al que ens fa falta.
-- **Wikidata**: té algun cotxe amb llargada/batalla, molt esparsa, i el diàmetre
-  de gir pràcticament no hi surt mai.
-- **Certificat de conformitat europeu (CoC)**: té les mides però no el gir, i no
-  és un dataset consultable.
+- **NHTSA vPIC** (`vpic.nhtsa.dot.gov`): free, official, no key. But it is US VIN
+  decoding and **it does not publish turning radius or diameter**. Useless for
+  what we need.
+- **Wikidata**: has the odd car with length/wheelbase, very sparse, and the
+  turning diameter is almost never there.
+- **European certificate of conformity (CoC)**: has the dimensions but not the
+  turning figure, and it is not a queryable dataset.
 
-Conclusió: JSON local curat a mà, tal com deies. La font fiable és que un humà ho
-ha comprovat.
+Conclusion: a hand-curated local JSON, just as you said. The reliable source is
+that a human has checked it.
 
-### ⚠ L'enum que proposaves encara té el parany a dins
+### ⚠ The enum you proposed still has the trap inside it
 
-Demanaves `"diametre-vorera" | "diametre-paret" | "radi"`. Però `"radi"` sol és
-exactament l'ambigüitat contra la qual avisaves: radi **de què**, de vorera o de
-paret? Proposo quatre valors, sense cap combinació ambigua:
+You asked for `"kerb-diameter" | "wall-diameter" | "radius"`. But `"radius"` on
+its own is exactly the ambiguity you were warning against: the radius **of
+what**, kerb or wall? I propose four values, with no ambiguous combination:
 
 ```
-"diametre-vorera" | "radi-vorera" | "diametre-paret" | "radi-paret"
+"kerb-diameter" | "kerb-radius" | "wall-diameter" | "wall-radius"
 ```
 
-I no és cosmètic: **vorera i paret porten a fórmules diferents**, no a un factor
-de correcció.
+And it is not cosmetic: **kerb and wall lead to different formulas**, not to a
+correction factor.
 
-- *Vorera a vorera* mesura la roda davantera exterior, a distància `B` de l'eix
-  posterior i `track/2` de l'eix del cotxe:
+- *Kerb to kerb* measures the outer front wheel, at distance `B` from the rear
+  axle and `track/2` from the axis of the car:
   `Rkerb = sqrt((Rc + track/2)² + B²)`  →  `Rc = sqrt(Rkerb² - B²) - track/2`
-  (és exactament el que fa `spec()` avui, L274 ✅)
+  (which is exactly what `spec()` does today, L274 ✅)
 
-- *Paret a paret* mesura la **cantonada davantera exterior de la carrosseria**, a
-  distància `B + Fo` de l'eix posterior i `W/2` de l'eix:
+- *Wall to wall* measures the **outer front corner of the bodywork**, at
+  distance `B + Fo` from the rear axle and `W/2` from the axis:
   `Rwall = sqrt((Rc + W/2)² + (B + Fo)²)`  →  `Rc = sqrt(Rwall² - (B+Fo)²) - W/2`
 
-Cada entrada del JSON:
+Each JSON entry:
 
 ```json
 { "id": "corolla-hatch-2023", "name": "Corolla hatchback 2023",
   "L": 4.37, "W": 1.79, "B": 2.64, "Fo": 0.94,
-  "turning": 10.4, "turningMeasure": "diametre-vorera",
+  "turning": 10.4, "turningMeasure": "kerb-diameter",
   "foEstimated": true,
-  "source": "fitxa Toyota ES", "checked": "2026-09-14" }
+  "source": "Toyota ES spec sheet", "checked": "2026-09-14" }
 ```
 
-`turning` no es pot llegir mai sense `turningMeasure` al costat. `vehicle.js`
-llança si falta el camp — no hi ha valor per defecte, perquè un valor per defecte
-és precisament com es cola l'error.
+`turning` can never be read without `turningMeasure` next to it. `vehicle.js`
+throws if the field is missing — there is no default, because a default is
+precisely how the error sneaks in.
 
-`foEstimated` deixa constància que les volades són una estimació (ja ho dius al
-text de la UI, L205 i L251-253); així la UI ho pot marcar en comptes d'amagar-ho.
+`foEstimated` records that the overhangs are an estimate (you already say so in
+the UI text, L205 and L251-253); that way the UI can flag it rather than hide it.
 
-### Descàrrega automàtica: no la construeixo
+### Automatic download: I am not building it
 
-Són 8 vehicles curats a mà. Un script per proposar-ne valors és més codi que les
-dades que gestiona. El disseny, quan calgui, és el que ja has descrit i hi estic
-d'acord: workflow d'Actions manual (`workflow_dispatch`), clau com a secret,
-escriu `data/fleet.proposed.json`, obre PR, tu la revises com un diff normal, mai
-toca producció. Zero claus al client — que amb Pages estàtic és obligatori.
+There are 8 hand-curated vehicles. A script to propose values for them is more
+code than the data it manages. The design, when it is needed, is the one you
+have already described and I agree with it: a manual Actions workflow
+(`workflow_dispatch`), key as a secret, writes `data/fleet.proposed.json`, opens
+a PR, you review it like any normal diff, it never touches production. Zero keys
+in the client — which with static Pages is mandatory.
 
-→ **Ho afegim quan la biblioteca creixi més enllà del que una persona vol
-mantenir a mà.** Avui no hi som.
+→ **We add it when the library grows beyond what one person wants to maintain by
+hand.** We are not there today.
 
 ---
 
 ## Tests
 
-`node --test`. Sense framework, sense fixtures, sense mocks. Objectiu del conjunt
-sencer: **per sota de 5 s**. Si un escenari de planificació va lent, l'encongeixo;
-el pressupost del test no es toca.
+`node --test`. No framework, no fixtures, no mocks. Target for the whole suite:
+**under 5 s**. If a planning scenario runs slowly, I shrink it; the test budget
+is not negotiable.
 
-### `test/planner-regression.test.js` — els dos bugs
+### `test/planner-regression.test.js` — the two bugs
 
-**Bug 1 (float32).** No faig servir el rellotge: un test de temps és inestable.
-Faig servir la propietat que el float32 trenca.
+**Bug 1 (float32).** I do not use the clock: a timing test is flaky. I use the
+property that float32 breaks.
 
-- `exitField()` retorna un `Float64Array` i el camp és un punt fix real de
-  Dijkstra: per a tota parella de cel·les veïnes transitables,
-  `d[j] <= d[i] + w·CELL + 1e-12`. Amb `Float64Array` es compleix; amb
-  `Float32Array` l'arrodoniment (~1e-7 en aquestes magnituds) el trenca de seguida
-  i la cua es reomple. Falla instantàniament i de manera determinista.
-- `plan()` passa a retornar també `expanded` (el comptador ja existeix a L533,
-  només cal exposar-lo — i és útil a la UI). El test l'executa sobre `garatge3` i
-  comprova `expanded < MAX_EXPAND` i que està dins d'un ordre de magnitud
-  raonable. Amb el closed set en float32 explotava.
+- `exitField()` returns a `Float64Array` and the field is a genuine fixed point
+  of Dijkstra: for every pair of neighbouring drivable cells,
+  `d[j] <= d[i] + w·CELL + 1e-12`. With `Float64Array` it holds; with
+  `Float32Array` the rounding (~1e-7 at these magnitudes) breaks it straight
+  away and the queue refills. It fails instantly and deterministically.
+- `plan()` also starts returning `expanded` (the counter already exists at L533,
+  it only needs exposing — and it is useful in the UI). The test runs it on
+  `garage3` and checks `expanded < MAX_EXPAND` and that it is within a
+  reasonable order of magnitude. With the closed set in float32 it blew up.
 
-**Bug 2 (monotonia del marge).** Invariant: un marge més gran no pot facilitar
-mai la sortida.
+**Bug 2 (margin monotonicity).** Invariant: a larger margin can never make
+leaving easier.
 
-- Disposició fixa i petita (redueixo l'escenari fins que el test vagi de pressa).
-- Marges 0.10 → 0.40 de 0.05 en 0.05.
-- Assert: la seqüència de `res.ok` és **monòtona no creixent**. Un sol
-  `false` seguit d'un `true` fa fallar el test amb els dos marges impresos.
-- El mateix cotxe i la mateixa llavor als 7 casos; l'única variable és el marge.
+- A small fixed layout (I shrink the scenario until the test runs fast).
+- Margins 0.10 → 0.40 in steps of 0.05.
+- Assert: the sequence of `res.ok` is **monotonically non-decreasing**. A single
+  `false` followed by a `true` fails the test, printing both margins.
+- The same car and the same seed in all 7 cases; the only variable is the margin.
 
-### La resta
+### The rest
 
-- `geometry.test.js` — `obbHitsOBB`, `segHitsOBB`, `cellHitsOBB` amb casos
-  coneguts: contacte aresta amb aresta, contacte cantonada, fregada justa,
-  separació justa, i el cas de 4,15 m que no cau a la graella (el motiu pel qual
-  existeixen els segments).
-- `vehicle.test.js` — les quatre conversions de `turningMeasure`. Cas clau: el
-  **mateix cotxe amb el mateix número** etiquetat `diametre-vorera` i
-  `diametre-paret` ha de donar `Rc` clarament diferents. Més: `turningMeasure`
-  absent → llança.
-- `evacuation.test.js` — rondes i els 5 diagnòstics: `blocked` (cotxe tapat per
-  un altre que tampoc surt), `embedded` (col·loca't dins d'un mur), `tight`
-  (passa amb marge 0 i no amb 0,25), `geometry`, `budget`.
-- `presets.test.js` — línia base de la migració, vegeu a sota.
+- `geometry.test.js` — `obbHitsOBB`, `segHitsOBB`, `cellHitsOBB` with known
+  cases: edge-to-edge contact, corner contact, a near graze, a near miss, and
+  the 4.15 m case that does not land on the grid (the reason segments exist).
+- `vehicle.test.js` — the four `turningMeasure` conversions. Key case: the
+  **same car with the same number** labelled `kerb-diameter` and `wall-diameter`
+  has to give clearly different `Rc`. Plus: `turningMeasure` missing → throws.
+- `evacuation.test.js` — rounds and the 5 diagnoses: `blocked` (a car blocked by
+  another that cannot get out either), `embedded` (placed inside a wall),
+  `tight` (passes with margin 0 and not with 0.25), `geometry`, `budget`.
+- `presets.test.js` — the migration baseline, see below.
 
-### Línia base de la migració (com sé que no he trencat res)
+### The migration baseline (how I know I have not broken anything)
 
-Les funcions del motor del prototip (L217-576) **ja no toquen el DOM** —
-`$()` només apareix a `readFields`/`writeFields`, que no formen part del càlcul.
-Així que:
+The prototype's engine functions (L217-576) **no longer touch the DOM** — `$()`
+only appears in `readFields`/`writeFields`, which are not part of the
+computation. So:
 
-1. Abans de tocar res, extrec L217-576 + els presets a un fitxer d'un sol ús al
-   *scratchpad*, l'executo amb Node i abordo els 6 presets, desant per a cada
-   cotxe `{ok, reason, man, len.toFixed(2)}` a `test/baseline.json`.
-2. `presets.test.js` executa els mòduls nous contra `baseline.json` i exigeix
-   coincidència exacta.
+1. Before touching anything, I extract L217-576 + the presets into a one-shot
+   file in the *scratchpad*, run it with Node and sweep the 6 presets, saving
+   `{ok, reason, man, len.toFixed(2)}` for each car into `test/baseline.json`.
+2. `presets.test.js` runs the new modules against `baseline.json` and demands an
+   exact match.
 
-Si la migració canvia cap resultat, el test m'ho diu — no ho decideix el meu ull.
+If the migration changes any result, the test tells me — it is not decided by my
+eye.
 
 ---
 
-## Desplegament
+## Deployment
 
-El repositori ja existeix: **`https://github.com/jnoguert/garage-planner.git`**,
-i **ja té un commit a `main`** (`28ae40f` — el README i el .gitignore que va
-generar GitHub). Ho he comprovat amb `git ls-remote`. Per tant no faig
-`git init` a seques, que em deixaria dues històries sense avantpassat comú i
-m'obligaria a forçar el push:
+The repository already exists: **`https://github.com/jnoguert/garage-planner.git`**,
+and **it already has a commit on `main`** (`28ae40f` — the README and the
+.gitignore GitHub generated). I checked with `git ls-remote`. So I do not do a
+bare `git init`, which would leave me with two histories with no common ancestor
+and force me to force-push:
 
 1. `git init` + `git remote add origin …` + `git fetch origin` +
    `git checkout -b main --track origin/main`.
-   Així el commit de GitHub queda com a base i **no es força res mai**.
-2. Commit de `PLAN.md` **sol**, sense codi. Push.
-3. Commit de la migració, amb el README i el `.gitignore` reescrits
-   (substitueixen els generats, en el mateix commit).
-4. **Tu**: Settings → Pages → *Deploy from a branch* → `main` / `/ (root)`.
-   Això no ho puc fer jo sense `gh` ni token.
-5. Jo: verifico el **desplegat, no el build local** — descarrego
-   `https://jnoguert.github.io/garage-planner/` i cada `./src/*.js` i
-   `./data/fleet.json`, i comprovo 200 + `Content-Type: text/javascript`
-   (un 404 o un `text/plain` en un mòdul és l'error clàssic de Pages).
-   El que no puc comprovar jo és que el canvas pinti: **això l'obres tu i
-   m'ho confirmes.** No donaré la migració per acabada fins llavors.
+   That way GitHub's commit is the base and **nothing is ever forced**.
+2. Commit `PLAN.md` **on its own**, with no code. Push.
+3. Commit the migration, with the README and the `.gitignore` rewritten (they
+   replace the generated ones, in the same commit).
+4. **You**: Settings → Pages → *Deploy from a branch* → `main` / `/ (root)`.
+   I cannot do that without `gh` or a token.
+5. Me: I verify the **deployed site, not the local build** — I download
+   `https://jnoguert.github.io/garage-planner/` and each `./src/*.js` and
+   `./data/fleet.json`, and check 200 + `Content-Type: text/javascript`
+   (a 404 or a `text/plain` on a module is the classic Pages failure).
+   What I cannot check myself is that the canvas paints: **you open it and
+   confirm that.** I will not call the migration done until then.
 
-⚠ Si `git push` demana credencials i no en tens de configurades a aquesta
-màquina, **m'aturo i t'ho dic** — no ho intento per cap altra via.
+⚠ If `git push` asks for credentials and you have none configured on this
+machine, **I stop and tell you** — I do not try any other route.
 
-Res es puja fins que aprovis aquest pla.
+Nothing is pushed until you approve this plan.
 
 ---
 
-## Fases
+## Phases
 
-| # | Què | Commit |
+| # | What | Commit |
 |---|---|---|
-| 0 | `git init` + remot + fetch de `28ae40f`, després `PLAN.md` sol | 1 |
-| 1 | Línia base amb el motor antic → `test/baseline.json` | — |
-| 2 | `geometry.js`, `vehicle.js` + `fleet.json`, els seus tests | 2 |
-| 3 | `planner.js` (freeAt/exitField/plan/evacuate) + tests de regressió | 2 |
+| 0 | `git init` + remote + fetch of `28ae40f`, then `PLAN.md` alone | 1 |
+| 1 | Baseline from the old engine → `test/baseline.json` | — |
+| 2 | `geometry.js`, `vehicle.js` + `fleet.json`, their tests | 2 |
+| 3 | `planner.js` (freeAt/exitField/plan/evacuate) + regression tests | 2 |
 | 4 | `scene.js`, `render.js`, `app.js`, `index.html` | 2 |
-| 5 | `presets.test.js` verd contra la línia base | 2 |
+| 5 | `presets.test.js` green against the baseline | 2 |
 | 6 | README, `.gitignore`, `tools/` | 2 |
-| 7 | Push, Pages, verificació en viu | — |
+| 7 | Push, Pages, live verification | — |
 
-**Aquí m'aturo i t'aviso.** El mode de conducció manual (fletxes contínues,
-distància mínima en viu amb punt de contacte, rastre de l'envolupant, desfés,
-comptador de canvis de marxa comparable amb el del planificador) és una feina a
-part i el planifiquem quan la migració estigui desplegada i verificada.
+**This is where I stop and check in.** The manual driving mode (continuous
+arrow-key driving, live minimum distance with a contact point, envelope trail,
+undo, a gear-change counter comparable with the planner's) is a separate job and
+we plan it once the migration is deployed and verified.
 
 ---
 
-## Verificació
+## Verification
 
 ```bash
-npm test                    # < 5 s, tot verd, inclosos els dos tests de regressió
-python -m http.server 8000  # http://localhost:8000 — els 6 presets, "Comprova les sortides"
+npm test                    # < 5 s, all green, including the two regression tests
+python -m http.server 8000  # http://localhost:8000 — the 6 presets, "Check the exits"
 ```
 
-A mà, un cop desplegat: obrir els 6 presets, `garatge` i `garatge3` han de donar
-el mateix veredicte que el prototip, i clicar un resultat ha d'animar el
-recorregut.
+By hand, once deployed: open the 6 presets, `garage` and `garage3` have to give
+the same verdict as the prototype, and clicking a result has to animate the
+route.

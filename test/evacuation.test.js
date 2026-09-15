@@ -1,10 +1,10 @@
-/* Evacuacio per rondes i els 5 diagnostics de "sense sortida":
-   blocked, embedded, tight, geometry, budget.
+/* Evacuation and the 5 "no exit" diagnoses: blocked, embedded, tight,
+   geometry, budget.
 
-   Cada escenari s'ha buscat empiricament (vegeu el comentari de cada test) i
-   despres s'ha comprovat que dona el diagnostic esperat de manera fiable, no
-   nomes un cop. Cap escenari fa servir mes d'un parell de cotxes ni una planta
-   gran, per mantenir el conjunt de tests per sota dels 5 segons. */
+   Each scenario was found empirically (see the comment on each test) and then
+   checked to give the expected diagnosis reliably, not just once. No scenario
+   uses more than a couple of cars or a large floor plan, to keep the test
+   suite under 5 seconds. */
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -15,78 +15,80 @@ import { specOf } from "../src/vehicle.js";
 
 const OPTS = { margin: 0.15, maxMan: 14, allowRev: true };
 
-/* -------------------------------------------------- comprovacio independent */
-/* "tandem" (vegeu scene.js): quatre places al fons (ids 1-4) i dos cotxes
-   aparcats al davant (ids 5,6), just al camí dels del mig (2 i 3) — no dels
-   de les puntes (1 i 4, que hi tenen via lliure de costat). evacuate() no
-   suposa mai que 5 o 6 ja han marxat: amb tots aparcats on son, 2 i 3
-   queden "blocked" (hi cabrien sols, pero els tapen 5/6), mentre que 1, 4,
-   5 i 6 surten igualment. Cap cotxe "surt" nomes perque un altre s'hagi
-   tret abans del mig. */
-test("evacuacio: cada cotxe es comprova amb tots els altres aparcats, no en suposa cap fora", async () => {
-  for (const name of ["tandem", "bateria", "estret"]) {
+/* ------------------------------------------------------ independent check */
+/* "tandem" (see scene.js): four bays at the back (ids 1-4) and two cars parked
+   in front (ids 5,6), right in the way of the middle ones (2 and 3) — not of
+   the outer ones (1 and 4, which have a clear run to the side). evacuate()
+   never assumes 5 or 6 have already left: with everyone parked where they are,
+   2 and 3 come out "blocked" (they would fit on their own, but 5/6 are in the
+   way), while 1, 4, 5 and 6 get out anyway. No car "gets out" merely because
+   another one was moved first. */
+test("evacuation: every car is checked with all the others parked, none assumed gone", async () => {
+  for (const name of ["tandem", "bays", "narrow"]) {
     const { world, cars } = presets[name]();
     const r = await evacuate(world, cars, OPTS);
-    assert.ok(r.out.length > 0, `${name}: algun cotxe hauria de sortir`);
+    assert.ok(r.out.length > 0, `${name}: some car should get out`);
 
-    /* La propietat, mesurada de nou des de FORA del cercador: cada pose de
-       cada recorregut ha de ser lliure amb TOTS els altres cotxes aparcats
-       on son. Si algun recorregut nomes fos valid suposant que un altre
-       cotxe ja ha marxat, aqui sortiria.
+    /* The property, measured again from OUTSIDE the search: every pose of
+       every route has to be free with ALL the other cars parked where they
+       are. If some route were only valid assuming another car had already
+       left, it would show up here.
 
-       Abans aixo s'escrivia com "els cotxes 2 i 3 del tandem han de quedar
-       blocked": una llista d'indexs que deixava de voler dir res tan bon
-       punt el cercador millorava (amb NTH=72 el tandem passa de 4/6 a 6/6,
-       i els recorreguts nous son valids — comprovat aqui mateix). La
-       propietat no depen de com de bo sigui el cercador; la llista, si. */
+       This used to be written as "cars 2 and 3 of the tandem must come out
+       blocked": a list of indices that stopped meaning anything as soon as the
+       search improved (with NTH=72 the tandem goes from 4/6 to 6/6, and the
+       new routes are valid — verified right here). The property does not
+       depend on how good the search is; the list did. */
     for (const o of r.out) {
       const car = cars.find((c) => c.id === o.id), v = specOf(car);
       const others = cars.map((c) => c.id).filter((id) => id !== o.id);
       const obs = obstaclesFor(world, cars, o.id, others);
       for (const p of o.path) {
         assert.ok(freeAt(world, obs, p.x, p.y, p.th, v, OPTS.margin),
-          `${name}: el cotxe ${o.id} passa per (${p.x.toFixed(2)}, ${p.y.toFixed(2)}) i alli hi ha algu`);
+          `${name}: car ${o.id} passes through (${p.x.toFixed(2)}, ${p.y.toFixed(2)}) and someone is there`);
       }
     }
   }
 });
 
 /* ------------------------------------------------------------- embedded --- */
-/* Cotxe col·locat amb el centre sobre un mur: ni amb marge 0 hi cap.
-   Tot en metres (newWorldM/fillRectM/addM), no en cel·les: aixi l'escenari
-   no depen de CELL i sobreviu a un canvi de resolucio de la graella. */
-test("diagnostic: embedded (col·locat sobre un mur)", async () => {
+/* A car placed with its centre on top of a wall: it does not fit even with
+   margin 0. Everything in metres (newWorldM/fillRectM/addM), not in cells: so
+   the scenario does not depend on CELL and survives a change of grid
+   resolution. */
+test("diagnosis: embedded (placed on top of a wall)", async () => {
   const world = newWorldM(10, 10);
   fillRectM(world, 0, 0, 10, 10, ASPH);
-  fillRectM(world, 2.5, 2.5, 4.0, 4.0, 0);   // VOID = mur, enmig de la calçada
+  fillRectM(world, 2.5, 2.5, 4.0, 4.0, 0);   // VOID = wall, in the middle of the roadway
   fillRectM(world, 0, 0, 1.0, 1.0, EXIT);
   const cars = makeCars();
-  const car = cars.addM(3.0, 3.0, 0, 1);     // centre just sobre el mur
+  const car = cars.addM(3.0, 3.0, 0, 1);     // centre right on the wall
   const r = await evacuate(world, cars, OPTS);
   assert.equal(r.stuck.length, 1);
   assert.equal(r.diag[car.id]?.kind, "embedded");
 });
 
 /* ----------------------------------------------------------------- tight --- */
-/* Parets exactes (segments, no graella) separades per un buit calculat: amb
-   marge 0 el cotxe just hi cap; amb el marge configurat (0.15) ja no. */
-test("diagnostic: tight (hi cap just amb marge 0, no amb 0.15)", async () => {
+/* Exact walls (segments, not grid) separated by a computed gap: with margin 0
+   the car fits by a whisker; with the configured margin (0.15) it no longer
+   does. */
+test("diagnosis: tight (fits with margin 0, not with 0.15)", async () => {
   const world = newWorldM(10, 5);
   fillRectM(world, 0, 0, 10, 5, ASPH);
   fillRectM(world, 0, 0, 1.0, 1.0, EXIT);
   const cars = makeCars();
-  const car = cars.addM(5.0, 2.5, 0, 1);     // Compacte: W=1.79 -> hw=0.895
+  const car = cars.addM(5.0, 2.5, 0, 1);     // Compact: W=1.79 -> hw=0.895
   const hw = specOf(car).W / 2;
-  const gap = 0.08;                          // < 0.15 (marge) i > 0
+  const gap = 0.08;                          // < 0.15 (the margin) and > 0
   world.segs = [
     mkSeg(0, car.cy - hw - gap, 10, car.cy - hw - gap),
     mkSeg(0, car.cy + hw + gap, 10, car.cy + hw + gap),
   ];
-  // comprovacio directa de freeAt als dos marges, abans de confiar en evacuate()
+  // direct freeAt check at both margins, before trusting evacuate()
   const v = specOf(car), obs = obstaclesFor(world, cars, -1, []);
   const st = rearAxle(car, v);
-  assert.equal(freeAt(world, obs, st.x, st.y, st.th, v, 0), true, "amb marge 0 hi hauria de cabre");
-  assert.equal(freeAt(world, obs, st.x, st.y, st.th, v, 0.15), false, "amb marge 0.15 no hi hauria de cabre");
+  assert.equal(freeAt(world, obs, st.x, st.y, st.th, v, 0), true, "with margin 0 it should fit");
+  assert.equal(freeAt(world, obs, st.x, st.y, st.th, v, 0.15), false, "with margin 0.15 it should not fit");
 
   const r = await evacuate(world, cars, OPTS);
   assert.equal(r.stuck.length, 1);
@@ -94,37 +96,38 @@ test("diagnostic: tight (hi cap just amb marge 0, no amb 0.15)", async () => {
 });
 
 /* -------------------------------------------------------------- geometry --- */
-/* Sol al recinte, sense prou espai per maniobrar cap a la sortida: ni girant
-   ni fent marxa enrere hi arriba. No es "start" (hi cap on es) ni "budget"
-   (l'espai explorable es petit, s'exhaureix abans del sostre).
+/* Alone on the site, with not enough room to manoeuvre towards the exit:
+   neither turning nor reversing gets it there. It is not "start" (it fits
+   where it is) nor "budget" (the explorable space is small, it runs out before
+   the ceiling).
 
-   El recinte ha de tenir MURS de veritat (VOID) al voltant, no nomes acabar-
-   se. Fora del dibuix hi ha "el carrer" i el cos del cotxe hi pot sobresortir
-   a proposit (vegeu freeAt) — nomes el centre ha de quedar dins. Aquest test
-   omplia tot el mon d'ASPH i es pensava que la vora feia de paret: el cotxe
-   podia treure el morro fora i arribar a la sortida de la cantonada per un
-   camí legal que la cerca d'abans, mes gruixuda, no trobava. Amb NTH=72 si
-   que el troba, i el test "fallava" ensenyant que la planta no era la que
-   volia provar. */
-test("diagnostic: geometry (sense espai per maniobrar, ni tot sol)", async () => {
+   The site has to have real WALLS (VOID) around it, not simply end. Outside
+   the drawing is "the street" and the car's body may deliberately stick out
+   into it (see freeAt) — only the centre has to stay inside. This test used to
+   fill the whole world with ASPH and assume the edge acted as a wall: the car
+   could poke its nose outside and reach the corner exit by a legal route that
+   the older, coarser search could not find. With NTH=72 it does find it, and
+   the test "failed", showing that the floor plan was not the one it meant to
+   test. */
+test("diagnosis: geometry (no room to manoeuvre, even alone)", async () => {
   const world = newWorldM(7, 4);
-  fillRectM(world, 0.5, 0.5, 6.5, 3.0, ASPH);   // murs (VOID) tot al voltant
-  fillRectM(world, 0.5, 0.5, 1.1, 1.1, EXIT);   // sortida arraconada a dalt
+  fillRectM(world, 0.5, 0.5, 6.5, 3.0, ASPH);   // walls (VOID) all round
+  fillRectM(world, 0.5, 0.5, 1.1, 1.1, EXIT);   // exit tucked into the corner
   const cars = makeCars();
-  const car = cars.addM(4.0, 1.75, 0, 1);       // passadis massa estret per girar
+  const car = cars.addM(4.0, 1.75, 0, 1);       // aisle too narrow to turn in
   const r = await evacuate(world, cars, OPTS);
   assert.equal(r.stuck.length, 1);
   assert.equal(r.diag[car.id]?.kind, "geometry");
 });
 
 /* ---------------------------------------------------------------- blocked - */
-/* Dues places veines, mateix costat i sentit, passadis estret: sol, cada
-   cotxe surt fent l'arc ample de sortida; junts, aquest arc de cada un
-   envaeix la plaça del vei i cap dels dos te un moviment inicial vàlid amb
-   l'altre present -> la ronda 1 no en treu cap i tots dos queden bloquejats
-   per l'altre, no per manca absoluta d'espai (que es exactament el que
-   distingeix "blocked" de "geometry"). */
-test("diagnostic: blocked (es tapen l'un a l'altre, cap dels dos per manca d'espai)", async () => {
+/* Two neighbouring bays, same side and same heading, narrow aisle: alone, each
+   car gets out by swinging wide; together, each one's arc invades the
+   neighbour's bay and neither has a valid first move with the other present ->
+   neither gets out, and both are blocked by the other rather than by an
+   absolute lack of room (which is exactly what tells "blocked" from
+   "geometry"). */
+test("diagnosis: blocked (they block each other, neither for lack of room)", async () => {
   const world = newWorldM(8, 9.5);
   fillRectM(world, 0, 0, 8, 9.5, ASPH);
   fillRectM(world, 0, 4.0, 0.5, 5.0, EXIT);
@@ -133,27 +136,27 @@ test("diagnostic: blocked (es tapen l'un a l'altre, cap dels dos per manca d'esp
   const b = cars.addM(4.4, 2.5, 90, 1);
 
   const r = await evacuate(world, cars, OPTS);
-  assert.equal(r.out.length, 0, "cap dels dos hauria de sortir junts");
+  assert.equal(r.out.length, 0, "neither should get out together");
   assert.equal(r.stuck.length, 2);
   assert.equal(r.diag[a.id]?.kind, "blocked");
   assert.equal(r.diag[b.id]?.kind, "blocked");
 });
 
 /* ----------------------------------------------------------------- budget - */
-/* Sala gran oberta (32 x 20 m) connectada a una sortida petita per un
-   corredor d'una sola cel·la ample: cap cotxe hi cap mai (geometricament
-   impossible), pero l'heuristica de graella (que no coneix la mida del
-   cotxe) el veu connex i dona una distancia finita. El Hybrid A* explora la
-   sala sencera abans de rendir-se i esgota el sostre de MAX_EXPAND en comptes
-   de concloure "noroute" de seguida.
-   La mida de sala que ho dispara es sensible (provat empiricament: 30x18 no
-   hi arriba, 32x20 si) — no es un llindar net, es la mida a partir de la
-   qual l'heuristica de graella enganya prou el cercador.
-   Es l'unic test d'aquest fitxer que triga mes d'uns pocs mil·lisegons. */
-test("diagnostic: budget (s'exhaureix el pressupost de cerca)", async () => {
+/* A large open room (32 x 20 m) connected to a small exit by a corridor one
+   cell wide: no car ever fits through (geometrically impossible), but the grid
+   heuristic (which knows nothing about the size of the car) sees it as
+   connected and gives a finite distance. The Hybrid A* explores the whole room
+   before giving up and exhausts the MAX_EXPAND ceiling instead of concluding
+   "noroute" straight away.
+   The room size that triggers this is sensitive (found empirically: 30x18 does
+   not get there, 32x20 does) — it is not a clean threshold, it is the size
+   from which the grid heuristic misleads the search enough.
+   It is the only test in this file that takes more than a few milliseconds. */
+test("diagnosis: budget (the search budget runs out)", async () => {
   const world = newWorldM(32, 20);
   fillRectM(world, 1.0, 1.0, 31.0, 19.0, ASPH);
-  fillRectM(world, 0, 10.0, 1.0, 10.5, ASPH);   // corredor d'una sola cel·la
+  fillRectM(world, 0, 10.0, 1.0, 10.5, ASPH);   // corridor one cell wide
   fillRectM(world, 0, 10.0, 0.5, 10.5, EXIT);
   const cars = makeCars();
   const car = cars.addM(16.0, 10.0, 0, 1);

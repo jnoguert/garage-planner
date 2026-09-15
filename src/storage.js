@@ -1,7 +1,7 @@
-/* Desa i recupera plantes dibuixades a localStorage: per navegador, sense
-   backend, sense sincronitzar entre dispositius — coherent amb "lloc
-   totalment estatic" (vegeu README/PLAN.md). Toca el DOM/navegador (com
-   render.js i app.js), no es motor: cap altre modul en depen. */
+/* Saves and restores drawn floor plans in localStorage: per browser, no
+   backend, no syncing between devices — consistent with "a fully static site"
+   (see README/PLAN.md). This touches the DOM/browser (like render.js and
+   app.js), it is not engine: no other module depends on it. */
 
 const PREFIX = "gp:save:";
 
@@ -17,16 +17,16 @@ function b64ToBytes(b64) {
   return bytes;
 }
 
-/* Noms dels garatges desats, ordenats. No hi ha cap index a part: es
-   llegeixen directament les claus de localStorage que porten el prefix —
-   un index apart es podria desincronitzar (oblidar-lo en desar/esborrar). */
+/* Names of the saved garages, sorted. There is no separate index: the
+   localStorage keys carrying the prefix are read directly — a separate index
+   could drift out of sync (by forgetting it on save/delete). */
 export function listSaves() {
   const names = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k?.startsWith(PREFIX)) names.push(k.slice(PREFIX.length));
   }
-  return names.sort((a, b) => a.localeCompare(b, "ca"));
+  return names.sort((a, b) => a.localeCompare(b));
 }
 
 export function saveGarage(name, world, cars) {
@@ -39,10 +39,10 @@ export function saveGarage(name, world, cars) {
   localStorage.setItem(PREFIX + name, JSON.stringify(data));
 }
 
-/* {world, cars}: `world` ja te la forma que fan servir la resta de moduls
-   (grid com Uint8Array, _wall/_staticCache buits); `cars` son dades planes
-   (id/t/cx/cy/th/override) — cal makeCars(cars) per tornar-los a fer un
-   array amb addM/addCell que continui la numeracio d'id. */
+/* {world, cars}: `world` already has the shape the other modules use (grid as
+   a Uint8Array, _wall/_staticCache empty); `cars` is plain data
+   (id/t/cx/cy/th/override) — makeCars(cars) is needed to turn it back into an
+   array with addM/addCell that carries on the id numbering. */
 export function loadGarage(name) {
   const raw = localStorage.getItem(PREFIX + name);
   if (!raw) return null;

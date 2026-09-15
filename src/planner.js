@@ -1,5 +1,5 @@
-/* Planificador i evacuacio. Cap DOM, cap estat global: tot arriba per
-   parametre, i per aixo es pot provar amb Node sense navegador. */
+/* Planner and evacuation. No DOM, no global state: everything arrives as a
+   parameter, which is why this can be tested under Node without a browser. */
 
 import {
   VOID, EXIT, ENTRANCE, GATE, CELL, idx, inBounds,
@@ -7,43 +7,43 @@ import {
 } from "./geometry.js";
 import { specOf } from "./vehicle.js";
 
-/* GATE val per EXIT i per ENTRANCE alhora (una sola porta que s'usa en
-   tots dos sentits) — a tot arreu on es compara una cel·la contra
-   `goalType`/`targetType`, cal acceptar tambe GATE. */
+/* GATE counts as EXIT and as ENTRANCE at the same time (a single door used in
+   both directions) — everywhere a cell is compared against
+   `goalType`/`targetType`, GATE has to be accepted too. */
 function isGoalCell(cellValue, goalType) { return cellValue === goalType || cellValue === GATE; }
 
-/* Sectors d'orientacio del closed set. Va ser 36 (10 graus) molt de temps i
-   era la causa principal dels "aquest cotxe hi cap i em diu que no": dues
-   poses amb el mateix bin x/y pero 9 graus de diferencia es consideraven el
-   mateix estat, i la cerca es quedava la mes barata de les dues encara que
-   fos justament la que despres no podia continuar. Mesurat al preset
-   "estret" (16 cotxes en un passadis just):
+/* Orientation sectors in the closed set. This was 36 (10 degrees) for a long
+   time and it was the main cause of "this car fits perfectly and the simulator
+   says it does not": two poses in the same x/y bin but 9 degrees apart counted
+   as the SAME state, and the search kept only the cheaper of the two — even
+   when that was precisely the one that could not continue afterwards.
+   Measured on the "narrow" preset (16 cars in a tight aisle):
 
-     NTH=36 (10 graus) -> 5/16 surten, i movent un cotxe 1 cm en surten 6
-     NTH=72  (5 graus) -> 16/16 surten, estable movent-lo +-2 cm
-     NTH=144 (2,5 graus) -> igual que 72, pero la suite passa de 7 s a 20 s
+     NTH=36 (10 degrees) -> 5/16 get out, and moving one car by 1 cm makes it 6
+     NTH=72  (5 degrees) -> 16/16 get out, stable when moved +-2 cm
+     NTH=144 (2.5 degrees) -> same as 72, but the suite goes from 7 s to 20 s
 
-   72 es on s'acaba el guany: dobla el temps de cerca i a canvi deixa de
-   descartar sortides que existeixen. La cerca segueix essent incompleta
-   (bug 2 al README) — nomes passa molt menys sovint. */
-export const NTH = 72;          // sectors d'orientacio (5 graus)
-export const XYBIN = 0.15;      // resolucio de la cerca en planta (m)
-export const STEP = 0.22;       // metres per pas d'arc
-export const GEAR_COST = 1.2;   // penalitzacio per canvi de marxa
-export const REV_COST = 0.5;    // sobrecost del metre en marxa enrere
+   72 is where the gain runs out: it doubles the search time and in exchange it
+   stops discarding exits that do exist. The search is still incomplete (bug 2
+   in the README) — it just happens far less often. */
+export const NTH = 72;          // orientation sectors (5 degrees)
+export const XYBIN = 0.15;      // search resolution in plan view (m)
+export const STEP = 0.22;       // metres per arc step
+export const GEAR_COST = 1.2;   // penalty for a gear change
+export const REV_COST = 0.5;    // extra cost per metre driven in reverse
 export const MAX_EXPAND = 260000;
 
-/* NTH, XYBIN, STEP i els 7 angles de direccio son el fix del bug de monotonia:
-   amb la resolucio original (0,25 m / 24 sectors / 5 angles) el cercador donava
-   resultats no monotons respecte del marge — sortia amb 0,25 i no amb 0,35. Un
-   marge mes gran no pot facilitar mai la sortida, aixi que aixo nomes podia ser
-   el cercador, no la geometria. Ho guarda test/planner-regression.test.js:
-   abaixar aquesta resolucio ha de fer fallar els tests. */
+/* NTH, XYBIN, STEP and the 7 steering angles are the fix for the monotonicity
+   bug: at the original resolution (0.25 m / 24 sectors / 5 angles) the search
+   gave results that were not monotonic in the margin — a car got out with 0.25
+   but not with 0.35. A larger margin can never make leaving easier, so that
+   could only be the search, not the geometry. test/planner-regression.test.js
+   guards it: lowering this resolution has to make the tests fail. */
 
-/* --------------------------------------------------------- referencies ---- */
+/* ---------------------------------------------------------- reference ----- */
 
-/* El planificador treballa amb el centre de l'eix posterior; el dibuix i la
-   colisio, amb el centre del cos. Aquestes dues fan el pont. */
+/* The planner works with the centre of the rear axle; drawing and collision
+   work with the centre of the body. These two bridge the gap. */
 export function rearAxle(car, v) {
   const off = v.L / 2 - v.Ro;
   return { x: car.cx - Math.cos(car.th) * off, y: car.cy - Math.sin(car.th) * off, th: car.th };
@@ -53,9 +53,9 @@ export function centreFromRear(x, y, th, v) {
   return { cx: x + Math.cos(th) * off, cy: y + Math.sin(th) * off, th };
 }
 
-/* Conjunt d'obstacles per a un cotxe concret: els murs del `world` (graella i
-   segments alhora) mes els altres cotxes que encara hi son. El planificador no
-   sap quina font ve d'on. */
+/* The obstacle set for one particular car: the walls of the `world` (grid and
+   segments alike) plus the other cars still present. The planner does not know
+   which source a wall came from. */
 export function obstaclesFor(world, allCars, excludeId, presentIds) {
   const set = new Set(presentIds);
   const cars = []; let carHd = 0;
@@ -68,9 +68,9 @@ export function obstaclesFor(world, allCars, excludeId, presentIds) {
   return { wall: wallField(world), cars, carHd, segs: world.segs };
 }
 
-/* ------------------------------------------------------------- colisio ---- */
+/* ----------------------------------------------------------- collision --- */
 
-/* x,y = centre de l'eix posterior. Cert si el cotxe hi cap sense tocar res. */
+/* x,y = centre of the rear axle. True if the car fits there touching nothing. */
 export function freeAt(world, obs, x, y, th, v, margin) {
   const co = Math.cos(th), si = Math.sin(th);
   const off = v.L / 2 - v.Ro;
@@ -78,8 +78,8 @@ export function freeAt(world, obs, x, y, th, v, margin) {
   const hl = v.L / 2 + margin, hw = v.W / 2 + margin;
   const ex = Math.abs(co) * hl + Math.abs(si) * hw;
   const ey = Math.abs(si) * hl + Math.abs(co) * hw;
-  // El centre no pot sortir de la planta. El cos si que pot sobresortir-ne:
-  // fora del dibuix hi ha el carrer, i es per on el cotxe travessa la sortida.
+  // The centre may not leave the floor plan. The body may stick out of it:
+  // outside the drawing is the street, and that is how the car crosses the exit.
   if (cx < 0 || cy < 0 || cx > world.cols * CELL || cy > world.rows * CELL) return false;
   const hd = Math.hypot(hl, hw);
 
@@ -114,15 +114,15 @@ export function cellTypeAt(world, x, y) {
   return world.grid[idx(world, c, r)];
 }
 
-/* ----------------------------------------------------------- heuristica --- */
+/* ----------------------------------------------------------- heuristic --- */
 
-/* Distancia en planta des de qualsevol cel·la fins a la cel·la mes propera
-   de `targetType` (EXIT per sortir, ENTRANCE per entrar-hi): escalfa el
-   Hybrid A*. Dijkstra a 8 veins sobre la graella de dibuix.
+/* Plan-view distance from any cell to the nearest cell of `targetType` (EXIT to
+   leave, ENTRANCE to arrive): it warms up the Hybrid A*. Dijkstra over the
+   8-neighbourhood of the drawing grid.
 
-   Float64Array, no Float32Array: amb float32 l'arrodoniment (~1e-7 en aquestes
-   magnituds) supera l'epsilon d'1e-9 de sota, la mateixa cel·la es torna a
-   encuar indefinidament i la cua no es buida mai. Es el bug 1. */
+   Float64Array, not Float32Array: with float32 the rounding (~1e-7 at these
+   magnitudes) exceeds the 1e-9 epsilon below, the same cell is queued again
+   indefinitely and the queue never empties. That is bug 1. */
 export function exitField(world, targetType = EXIT, stats) {
   const { cols, rows, grid } = world;
   const N = cols * rows;
@@ -146,19 +146,19 @@ export function exitField(world, targetType = EXIT, stats) {
       if (nd < d[j] - 1e-9) { d[j] = nd; pq.push(nd, j); }
     }
   }
-  // Amb Float64 cada cel·la s'estableix ~1 cop. Si algu hi torna a posar
-  // Float32, aixo s'enfila a centenars de vegades N i no acaba mai:
-  // test/planner-regression.test.js ho vigila.
+  // With Float64 each cell is settled ~once. If anyone puts Float32 back here,
+  // this climbs to hundreds of times N and never finishes:
+  // test/planner-regression.test.js watches for it.
   if (stats) stats.pops = pops;
   return d;
 }
 
-/* --------------------------------------------------------- planificador --- */
+/* ------------------------------------------------------------- planner --- */
 
-/* Pose despres de recorrer `armLen` metres d'arc amb aquest angle de volant
-   `st` (0 = recte) i marxa `dir`, des de (cx,cy,cth). Es la mateixa formula
-   que el pas principal de plan(), pero parametritzada per longitud d'arc
-   perque tambe serveix per als sub-punts de subGoalPose() mes avall. */
+/* Pose after travelling `armLen` metres of arc at this steering angle `st`
+   (0 = straight) and gear `dir`, starting from (cx,cy,cth). It is the same
+   formula as the main step of plan(), but parameterised by arc length so that
+   it also serves the sub-points of subGoalPose() below. */
 function stepPose(cx, cy, cth, dir, st, armLen, v) {
   if (Math.abs(st) < 1e-6) return { x: cx + dir * armLen * Math.cos(cth), y: cy + dir * armLen * Math.sin(cth), th: cth };
   const R = v.B / Math.tan(st);
@@ -167,18 +167,17 @@ function stepPose(cx, cy, cth, dir, st, armLen, v) {
   return { x: cx - R * Math.sin(cth) + R * Math.sin(nth), y: cy + R * Math.cos(cth) - R * Math.cos(nth), th: nth };
 }
 
-/* Si l'arc de (cx,cy,cth) fins al pas sencer (STEP) travessa una cel·la de
-   `goalType` en algun punt — inclos el pas sencer mateix (k=4), aixi ja no
-   cal cap comprovacio d'aterratge per separat — evita que una zona
-   d'entrada/sortida mes prima que STEP (0,22 m) quedi "saltada per sobre":
-   el cotxe hi passaria fisicament pero cap dels dos extrems del salt
-   discret cauria a dins. Mesurat: amb una sortida ampla pero de nomes
-   0,1-0,2 m de fondaria en la direccio d'avanc, plan() fallava (noroute)
-   tot i ser trivialment recte — amb aquesta comprovacio hi arriba.
-   4 sub-punts es prou fi per a qualsevol cosa dibuixable (la cel·la mes
-   petita ja es de 0,1 m). Cada sub-punt es valida amb freeAt() tambe: no
-   n'hi ha prou que el pas sencer sigui lliure als dos extrems, un punt
-   intermedi podria no ser-ho en una geometria prou estranya. */
+/* Whether the arc from (cx,cy,cth) to the full step (STEP) crosses a cell of
+   `goalType` at any point — including the full step itself (k=4), so no
+   separate landing check is needed. This stops an entrance/exit zone thinner
+   than STEP (0.22 m) from being "jumped over": the car would physically pass
+   through it, but neither end of the discrete jump would land inside.
+   Measured: with an exit that is wide but only 0.1-0.2 m deep in the direction
+   of travel, plan() failed (noroute) even though it was trivially straight —
+   with this check it gets there. 4 sub-points is fine enough for anything
+   drawable (the smallest cell is already 0.1 m). Every sub-point is validated
+   with freeAt() too: it is not enough for the full step to be free at both
+   ends, an intermediate point might not be in a strange enough geometry. */
 function subGoalPose(world, obs, cx, cy, cth, dir, st, v, margin, goalType) {
   for (let k = 1; k <= 4; k++) {
     const sp = stepPose(cx, cy, cth, dir, st, STEP * (k / 4), v);
@@ -189,16 +188,17 @@ function subGoalPose(world, obs, cx, cy, cth, dir, st, v, margin, goalType) {
   return null;
 }
 
-/* Hybrid A* sobre (x, y, angle) amb marxa endavant i enrere, des de la
-   posicio actual del cotxe fins a qualsevol cel·la de `goalType` (EXIT per
-   defecte; ENTRANCE per calcular — combinat amb reversePath() — el
-   recorregut invers d'entrada, vegeu arrive() mes avall).
-   Retorna {ok, path, man, len, expanded} o {ok:false, reason, expanded}.
+/* Hybrid A* over (x, y, angle) with forward and reverse gears, from the car's
+   current position to any cell of `goalType` (EXIT by default; ENTRANCE to
+   compute — combined with reversePath() — the reversed arrival route, see
+   arrive() below).
+   Returns {ok, path, man, len, expanded} or {ok:false, reason, expanded}.
    reason: "start" | "noroute" | "budget". */
 export function plan(world, car, obs, hf, v, opts, goalType = EXIT) {
   const nx = Math.ceil(world.cols * CELL / XYBIN), ny = Math.ceil(world.rows * CELL / XYBIN);
-  // Float64Array tambe aqui, i pel mateix motiu que a exitField(): amb float32
-  // el cost arrodonit supera l'epsilon d'1e-6 i el closed set deixa de tancar.
+  // Float64Array here too, and for the same reason as in exitField(): with
+  // float32 the rounded cost exceeds the 1e-6 epsilon and the closed set stops
+  // closing.
   const closed = new Float64Array(nx * ny * NTH).fill(Infinity);
   const X = [], Y = [], T = [], G = [], P = [], DIR = [], MAN = [];
   const start = rearAxle(car, v);
@@ -249,12 +249,12 @@ export function plan(world, car, obs, hf, v, opts, goalType = EXIT) {
         const hh = hAt(nxp, nyp);
         if (!isFinite(hh)) continue;
 
-        // El tram sencer es lliure (acabem de comprovar-ho): si l'aterratge
-        // ja es a prop del objectiu (heuristica < 1,5 STEP — nomes aixo, no
-        // cada expansio: subGoalPose fa fins a 4 freeAt() mes i cridar-ho
-        // sempre multiplicava per 4 el temps de cerca sencer), mira si en
-        // algun punt del tram (l'aterratge inclos) arriba a `goalType` —
-        // vegeu subGoalPose per que cal mirar tot el tram i no nomes l'extrem.
+        // The whole step is free (we just checked): if the landing point is
+        // already close to the goal (heuristic < 1.5 STEP — only then, not on
+        // every expansion: subGoalPose costs up to 4 more freeAt() calls and
+        // calling it always quadrupled the whole search time), look at whether
+        // any point along the step (landing included) reaches `goalType` — see
+        // subGoalPose for why the whole step matters and not just its end.
         if (hh < STEP * 1.5) {
           const sub = subGoalPose(world, obs, cx, cy, cth, dir, st, v, opts.margin, goalType);
           if (sub) {
@@ -285,17 +285,17 @@ export function plan(world, car, obs, hf, v, opts, goalType = EXIT) {
   return { ok: true, path, man: MAN[goal], len: G[goal], expanded };
 }
 
-/* ------------------------------------------------------------ evacuacio --- */
+/* ---------------------------------------------------------- evacuation --- */
 
-/* El model cinematic d'aquest motor es reversible: recorrer un arc endavant
-   amb un angle de volant concret i despres recorrer'l en sentit contrari amb
-   el MATEIX angle (marxa enrere en lloc d'endavant) torna exactament al
-   punt de partida — es pot comprovar algebraicament amb la formula de l'arc
-   de plan() (i test/access.test.js ho fa amb un recorregut real). Aixo vol
-   dir que un recorregut trobat "de la plaça cap a X" es, girat, un
-   recorregut valid "de X cap a la plaça" amb les marxes intercanviades:
-   no cal cap cercador nou per saber com s'hi entra, nomes invertir el que
-   ja en sortia. `arrive()` ho explota per no duplicar plan(). */
+/* The kinematic model of this engine is reversible: driving an arc forwards at
+   a given steering angle and then driving it back at the SAME angle (in
+   reverse instead of forwards) returns exactly to the starting point — it can
+   be checked algebraically with the arc formula in plan() (and
+   test/access.test.js does it with a real route). That means a route found
+   "from the bay towards X" is, reversed, a valid route "from X towards the
+   bay" with the gears swapped: no new search is needed to know how a car gets
+   in, only reversing the one that got it out. `arrive()` exploits this so it
+   does not have to duplicate plan(). */
 export function reversePath(path) {
   const n = path.length - 1;
   const out = [];
@@ -306,18 +306,18 @@ export function reversePath(path) {
   return out;
 }
 
-/* Nucli comu a evacuate()/arrive(): cada cotxe es comprova de manera
-   independent, amb TOTS els altres aparcats exactament on son — mai se
-   suposa que algun altre ja ha sortit (o encara no ha arribat) per fer-li
-   lloc. Aixo es deliberat: un cotxe ha de poder sortir/entrar tal com esta
-   la planta ara, no nomes en una seqüencia hipotetica en que uns altres es
-   mouen primer. (Versio antiga d'evacuate(): "per rondes", on un cotxe que
-   nomes podia sortir despres que un altre marxés es donava per bo — es va
-   treure perque donava per suposat un ordre que ningu garanteix.)
+/* Core shared by evacuate()/arrive(): every car is checked independently, with
+   ALL the others parked exactly where they are — it is never assumed that some
+   other car has already left (or has not arrived yet) to make room. That is
+   deliberate: a car has to be able to leave/arrive with the floor plan as it
+   stands now, not only in some hypothetical sequence where others move first.
+   (The old version of evacuate() worked "in rounds", where a car that could
+   only leave after another one had gone was counted as fine — it was dropped
+   because it assumed an order nobody guarantees.)
 
-   `goalType` es EXIT (sortida) o ENTRANCE (pas previ d'arrive(), abans de
-   girar el recorregut). `onProgress` es opcional i pot retornar una
-   promesa; l'app l'aprofita per cedir el fil i moure la barra. */
+   `goalType` is EXIT (leaving) or ENTRANCE (the intermediate step of arrive(),
+   before the route is reversed). `onProgress` is optional and may return a
+   promise; the app uses it to yield the thread and move the progress bar. */
 async function checkDirection(world, cars, opts, goalType, onProgress) {
   const hf = exitField(world, goalType);
   const allIds = cars.map((c) => c.id);
@@ -333,35 +333,37 @@ async function checkDirection(world, cars, opts, goalType, onProgress) {
     if (res.ok) {
       out.push({ id: car.id, path: res.path, man: res.man, len: res.len, present: others });
     } else {
-      // Per diagnosticar per que: si tampoc hi cabria sol al recinte, no es
-      // culpa dels altres cotxes — distingeix "el tapen" de "no hi ha espai".
+      // To diagnose why: if it would not fit in the empty floor plan either,
+      // the other cars are not to blame — this separates "they block it" from
+      // "there is not enough room".
       const v = specOf(car);
       const alone = obstaclesFor(world, cars, car.id, []);
       const resAlone = plan(world, car, alone, hf, v, opts, goalType);
       if (resAlone.ok) {
-        // Sol hi cap. Abans aixo s'etiquetava directament com "el tapen els
-        // altres cotxes", pero aixo NO es comprovava enlloc: nomes es deduia
-        // de "sol si, acompanyat no". I no es el mateix. Recorrem el cami que
-        // faria sol mirant si algun cotxe l'hi barra de veritat.
+        // It fits on its own. This used to be labelled directly as "the other
+        // cars block it", but that was NEVER checked anywhere: it was merely
+        // inferred from "alone yes, with others no". And those are not the same
+        // thing. Walk the route it would take alone and see whether some car
+        // really does block it.
         //
-        // El marge es el mateix amb que s'ha fet la comprovacio (opts.margin),
-        // no 0: el que decideix el veredicte no es nomes el toc fisic sino
-        // tambe passar-hi mes a prop del marge de seguretat demanat.
+        // The margin is the one the check was run with (opts.margin), not 0:
+        // what decides the verdict is not just physical contact but also
+        // passing closer than the requested safety margin.
         let hitAt = null;
         for (const pose of resAlone.path) {
           if (!freeAt(world, withOthers, pose.x, pose.y, pose.th, v, opts.margin)) { hitAt = pose; break; }
         }
         if (!hitAt) {
-          // Cap punt barrat: aquest mateix cami segueix essent valid amb tots
-          // els altres cotxes aparcats (mateixa comprovacio, pose a pose, que
-          // fa el cercador). O sigui que SI que pot sortir — el que ha passat
-          // es que el cercador no l'ha sabut retrobar amb mes obstacles al
-          // mapa (els bins de XYBIN/NTH col·lapsen poses diferents i en poden
-          // descartar una que feia falta despres). Abans aixo es reportava com
-          // "el tapen els altres cotxes", acusant un cotxe que no hi tenia res
-          // a veure; ara s'aprofita el cami, que ja el tenim a la ma i esta
-          // verificat. La cerca segueix essent incompleta (vegeu bug 2 al
-          // README): aixo es una xarxa de seguretat, no la cura.
+          // No point is blocked: this very route is still valid with all the
+          // other cars parked (the same pose-by-pose check the search itself
+          // does). So the car CAN get out — what happened is that the search
+          // could not find the route again with more obstacles on the map (the
+          // XYBIN/NTH bins collapse distinct poses and may discard one that was
+          // needed later). This used to be reported as "the other cars block
+          // it", blaming a car that had nothing to do with it; now the route is
+          // used, since we already have it in hand and it is verified. The
+          // search is still incomplete (see bug 2 in the README): this is a
+          // safety net, not the cure.
           out.push({ id: car.id, path: resAlone.path, man: resAlone.man, len: resAlone.len, present: others });
           done++;
           await onProgress?.(done / total);
@@ -385,14 +387,14 @@ async function checkDirection(world, cars, opts, goalType, onProgress) {
   return { out, stuck, diag, order: out.map((o) => o.id) };
 }
 
-/* Sortida: de la plaça de cadascu cap a la sortida mes propera. */
+/* Leaving: from each car's bay to the nearest exit. */
 export function evacuate(world, cars, opts, onProgress) {
   return checkDirection(world, cars, opts, EXIT, onProgress);
 }
 
-/* Entrada: de l'entrada mes propera cap a la plaça de cadascu. Es calcula
-   com una "sortida" cap a ENTRANCE (mateix cercador, cap codi nou) i
-   despres es giren els recorreguts trobats — vegeu reversePath(). */
+/* Arriving: from the nearest entrance to each car's bay. It is computed as an
+   "exit" towards ENTRANCE (same search, no new code) and then the routes found
+   are reversed — see reversePath(). */
 export async function arrive(world, cars, opts, onProgress) {
   const r = await checkDirection(world, cars, opts, ENTRANCE, onProgress);
   const diag = {};
@@ -400,11 +402,11 @@ export async function arrive(world, cars, opts, onProgress) {
   return { ...r, out: r.out.map((o) => ({ ...o, path: reversePath(o.path) })), diag };
 }
 
-/* Entrada i sortida: cada cotxe ha de poder fer les dues coses, amb tots
-   els altres aparcats. Nomes compta com a "surt" (out) si hi arriba en
-   totes dues direccions; si en falla alguna, stuck amb el diagnostic de
-   cadascuna (una pot anar be i l'altra no: p.ex. cap justet nomes en un
-   sentit no es el mateix problema geometric). */
+/* In and out: every car has to manage both, with all the others parked. It
+   only counts as "gets through" (out) if it makes it in both directions; if
+   either fails, it goes to stuck with a diagnosis for each one (one direction
+   can be fine and the other not: e.g. a squeeze in one direction only is not
+   the same geometric problem). */
 export async function checkBothWays(world, cars, opts, onProgress) {
   const exitR = await checkDirection(world, cars, opts, EXIT, (p) => onProgress?.(p * 0.5));
   const entryR = await arrive(world, cars, opts, (p) => onProgress?.(0.5 + p * 0.5));
@@ -423,20 +425,20 @@ export async function checkBothWays(world, cars, opts, onProgress) {
   return { out, stuck, diag };
 }
 
-/* --------------------------------------------------------- maniobres ------ */
+/* --------------------------------------------------------- manoeuvres ---- */
 
 function wrapAngle(a) { let d = a % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
 
-/* Desglossa un `path` (el que retorna plan()/evacuate() a `out[].path`) en
-   maniobres: trams seguits en la mateixa marxa, amb la distancia recorreguda
-   i cap a quin costat giren en conjunt. El nombre de trams menys 1 es
-   exactament `man` (el comptador de canvis de marxa que ja fa servir la UI).
+/* Breaks a `path` (what plan()/evacuate() return in `out[].path`) down into
+   manoeuvres: runs driven in the same gear, with the distance covered and
+   which way they turn overall. The number of runs minus 1 is exactly `man`
+   (the gear-change counter the UI already uses).
 
-   ponytail: "turn" es el gir NET del tram (suma dels increments d'angle,
-   no el gir instantani) — un tram que corba a la dreta i despres a
-   l'esquerra en la mateixa marxa pot sortir "recte" si els dos es
-   compensen. Prou per a un resum llegible; si algun dia cal el detall
-   exacte, ja hi ha el `path` sencer per dibuixar-lo punt a punt. */
+   ponytail: "turn" is the NET turn of the run (the sum of the angle
+   increments, not the instantaneous turn) — a run that curves right and then
+   left in the same gear can come out as "straight" if the two cancel. Good
+   enough for a readable summary; if the exact detail is ever needed, the full
+   `path` is there to draw point by point. */
 export function summariseManeuvers(path) {
   if (!path || path.length < 2) return [];
   const steps = [];
@@ -451,9 +453,9 @@ export function summariseManeuvers(path) {
     }
     if (dist > 1e-6) {
       steps.push({
-        dir: dir < 0 ? "enrere" : "endavant",
+        dir: dir < 0 ? "reverse" : "forward",
         distance: dist,
-        turn: Math.abs(dth) < 0.08 ? "recte" : (dth > 0 ? "dreta" : "esquerra"),
+        turn: Math.abs(dth) < 0.08 ? "straight" : (dth > 0 ? "right" : "left"),
       });
     }
     i = j;

@@ -1,7 +1,7 @@
 {
   "name": "garage-planner",
   "version": "1.0.0",
-  "description": "Simulador de sortida d'aparcament: comprova si tots els cotxes poden arribar a la sortida.",
+  "description": "Parking exit simulator: checks whether every car can reach the exit.",
   "type": "module",
   "private": true,
   "license": "MIT",

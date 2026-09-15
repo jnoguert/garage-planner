@@ -1,10 +1,10 @@
-/* Cablejat del DOM: events, panells, HUD, animacio de resultats. Cap logica
-   de motor viu aqui — nomes crida als moduls i pinta el que retornen. */
+/* DOM wiring: events, panels, HUD, result animation. No engine logic lives
+   here — it only calls the modules and paints what they return. */
 
 import { VOID, ASPH, SPOT, EXIT, ENTRANCE, GATE, CELL } from "./geometry.js";
 import {
   newWorld, setCell, resize as resizeWorld, hasExit, hasEntrance, makeCars, presets,
-  addLine, setLineLength, lineLength, lineMidpoint,
+  addLine, setLineLength, lineLength,
 } from "./scene.js";
 import { evacuate, arrive, checkBothWays, summariseManeuvers } from "./planner.js";
 import { FLEET, spec, specOf } from "./vehicle.js";
@@ -13,26 +13,26 @@ import { listSaves, saveGarage, loadGarage, deleteSave } from "./storage.js";
 
 const $ = (id) => document.getElementById(id);
 
-/* Estat de l'app: `world`+`cars` son les dades del motor; la resta es UI. */
+/* App state: `world`+`cars` are the engine's data; the rest is UI. */
 const S = {
   world: newWorld(56, 36),
   cars: makeCars(),
   tool: "asphalt",
-  brush: 10,               // en cel·les; sincronitzat amb el llisquet en cm
+  brush: 10,               // in cells; kept in sync with the slider in cm
   angle: 270,
-  mode: "exit",             // "exit" | "entry" | "both" — vegeu #mode
-  veh: 1,                 // index a FLEET del "model seleccionat" al panell
+  mode: "exit",             // "exit" | "entry" | "both" — see #mode
+  veh: 1,                 // FLEET index of the "selected model" in the panel
   sel: -1,
   results: null,
   playing: null,
   anim: null,
   hover: null,
-  linePreview: null,       // {x1,y1,x2,y2} mentre s'arrossega l'eina Línia
+  linePreview: null,       // {x1,y1,x2,y2} while the Line tool is being dragged
 };
 
-/* L'edicio manual del panell nomes toca `car.override`, mai FLEET. Es
-   deliberat (vegeu PLAN.md): al prototip original, editar un camp mutava
-   l'entrada compartida i canviava tots els cotxes d'aquell model alhora. */
+/* Hand-editing in the panel only touches `car.override`, never FLEET. That is
+   deliberate (see PLAN.md): in the original prototype, editing a field mutated
+   the shared entry and changed every car of that model at once. */
 function curEntry() {
   const car = S.cars.find((c) => c.id === S.sel);
   return car?.override ?? FLEET[car?.t ?? S.veh] ?? FLEET[S.veh];
@@ -61,7 +61,7 @@ function statusOf(id) {
   return "ok";
 }
 
-/* --------------------------------------------------------------- pintura -- */
+/* -------------------------------------------------------------- painting -- */
 const MATERIAL = { asphalt: ASPH, spot: SPOT, wall: VOID, entrance: ENTRANCE, exit: EXIT, gate: GATE };
 function paintAt(p, forceType) {
   const type = forceType ?? MATERIAL[S.tool];
@@ -109,25 +109,25 @@ cv.addEventListener("pointerdown", (e) => {
       $("preset").value = S.veh; writeFields(); updateHud();
       drag = { mode: "rot", id: S.sel }; redraw(); return;
     }
-    // Cotxe nou: es planta amb l'angle ja triat (llisquet o tecles R/E,
-    // vegeu el fantasma que ja el mostrava abans de clicar) — un sol clic
-    // el col·loca, no cal arrossegar per orientar-lo despres. Per canviar
-    // l'angle d'un cotxe ja plantat, torna-hi a clicar i arrossega.
+    // New car: it is planted at the angle already chosen (slider or R/E keys,
+    // see the ghost that was showing it before the click) — a single click
+    // places it, no dragging needed to orient it afterwards. To change the
+    // angle of a car already placed, click it again and drag.
     const car = S.cars.addM(p.x, p.y, S.angle, S.veh);
     S.sel = car.id;
     invalidate(); return;
   }
   if (S.tool === "erase") {
-    // goma universal: si hi ha un cotxe sota el cursor, el treu; si no,
-    // converteix la cel·la en calçada oberta (mur, plaça, entrada i sortida
-    // son tots "alguna cosa dibuixada aqui" — esborrar-ho es tornar a obert).
+    // Universal eraser: if there is a car under the cursor, it is removed; if
+    // not, the cell becomes open roadway (wall, bay, entrance and exit are all
+    // "something drawn here" — erasing it means going back to open).
     const hit = carAt(p.x, p.y);
     if (hit >= 0) { S.cars.splice(hit, 1); invalidate(); drag = { mode: "erase" }; return; }
     drag = { mode: "eraseCell" }; paintAt(p, ASPH); return;
   }
   if (S.tool === "line") {
-    // Nomes es marca l'extrem fix aqui; la linia no es planta fins deixar
-    // anar (endDrag), un cop sapiguem si es horitzontal o vertical.
+    // Only the fixed end is marked here; the line is not planted until release
+    // (endDrag), once we know whether it is horizontal or vertical.
     drag = { mode: "line", x0: p.x, y0: p.y };
     S.linePreview = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
     redraw(); return;
@@ -142,8 +142,8 @@ cv.addEventListener("pointermove", (e) => {
   else if (drag.mode === "eraseCell") paintAt(p, ASPH);
   else if (drag.mode === "erase") { const h = carAt(p.x, p.y); if (h >= 0) { S.cars.splice(h, 1); invalidate(); } }
   else if (drag.mode === "line") {
-    // Fantasma: es projecta sobre l'eix (horitzontal o vertical) que hagi
-    // recorregut mes des de l'extrem fix — el mateix criteri que addLine().
+    // Ghost: projected onto whichever axis (horizontal or vertical) has been
+    // travelled further from the fixed end — the same criterion as addLine().
     const horiz = Math.abs(p.x - drag.x0) >= Math.abs(p.y - drag.y0);
     S.linePreview = { x1: drag.x0, y1: drag.y0, x2: horiz ? p.x : drag.x0, y2: horiz ? drag.y0 : p.y };
     redraw();
@@ -171,12 +171,12 @@ cv.addEventListener("pointerup", endDrag);
 cv.addEventListener("pointercancel", () => { S.linePreview = null; drag = null; redraw(); });
 cv.addEventListener("pointerleave", () => { S.hover = null; redraw(); });
 
-/* Doble clic sobre la mesura en metres d'una línia: en canvia la llargada
-   mantenint fix l'extrem d'inici (setLineLength ja ho fa). Nomes actiu amb
-   l'eina Línia seleccionada — aixi els dos clics del doble clic no acaben
-   pintant res amb una altra eina abans que arribi el dblclick (amb l'eina
-   Línia, dos clics quasi al mateix punt no arriben a 1 cel·la i addLine()
-   ja els descarta tot sol). */
+/* Double-clicking a line's metre label changes its length, keeping the start
+   end fixed (setLineLength already does that). Only active with the Line tool
+   selected — that way the two clicks of the double click do not end up
+   painting something with another tool before the dblclick arrives (with the
+   Line tool, two clicks at almost the same point do not reach one cell and
+   addLine() discards them by itself). */
 cv.addEventListener("dblclick", (e) => {
   if (S.tool !== "line" || !S.world.lines.length) return;
   const r = cv.getBoundingClientRect();
@@ -188,10 +188,10 @@ cv.addEventListener("dblclick", (e) => {
     const ox = horiz ? 0 : s * 0.42, oy = horiz ? -s * 0.30 : 0;
     const tx = V.px(mx) + ox, ty = V.py(my) + oy;
     if (Math.hypot(sx - tx, sy - ty) > 16) continue;
-    const input = prompt("Nova llargada (m):", lineLength(line).toFixed(2));
+    const input = prompt("New length (m):", lineLength(line).toFixed(2));
     if (input === null) return;
     const val = parseFloat(input.replace(",", "."));
-    if (!isFinite(val) || val < CELL) { alert(`Cal un numero de com a minim ${CELL} m.`); return; }
+    if (!isFinite(val) || val < CELL) { alert(`Enter a number of at least ${CELL} m.`); return; }
     setLineLength(S.world, line, val);
     invalidate();
     return;
@@ -213,16 +213,16 @@ cv.addEventListener("keydown", (e) => {
   }
 });
 
-/* --------------------------------------------------------------- panells -- */
+/* --------------------------------------------------------------- panels -- */
 $("tools").addEventListener("click", (e) => {
   const b = e.target.closest(".tool"); if (!b) return;
   S.tool = b.dataset.tool; S.sel = -1;
   document.querySelectorAll(".tool").forEach((t) => t.setAttribute("aria-pressed", t === b ? "true" : "false"));
   redraw();
 });
-/* El llisquet es en centimetres (coincideix amb la mida de cel·la, 10cm, i
-   es mes concret que metres per a un pinzell d'aquesta escala); S.brush es
-   el nombre de cel·les que fa servir paintAt, derivat aqui. */
+/* The slider is in centimetres (it matches the cell size, 10 cm, and is more
+   concrete than metres for a brush at this scale); S.brush is the number of
+   cells paintAt uses, derived here. */
 $("brush").addEventListener("input", (e) => {
   const cm = +e.target.value;
   S.brush = Math.max(1, Math.round(cm / 100 / CELL));
@@ -242,8 +242,8 @@ function loadPreset(name) {
 }
 document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => loadPreset(b.dataset.preset)));
 
-/* ------------------------------------------------------ garatges desats -- */
-/* localStorage, per navegador (storage.js) — cap servidor, cap sincronitzacio. */
+/* -------------------------------------------------------- saved garages -- */
+/* localStorage, per browser (storage.js) — no server, no syncing. */
 function refreshSavedList() {
   const ul = $("savedList"); ul.innerHTML = "";
   for (const name of listSaves()) {
@@ -252,14 +252,14 @@ function refreshSavedList() {
     load.className = "load"; load.type = "button"; load.textContent = name;
     load.addEventListener("click", () => {
       const g = loadGarage(name);
-      if (!g) { refreshSavedList(); return; }        // algu altre l'ha esborrat mentrestant
+      if (!g) { refreshSavedList(); return; }        // someone else deleted it meanwhile
       S.world = g.world; S.cars = makeCars(g.cars); S.sel = -1;
       writeFields(); invalidate(); fit();
     });
     const del = document.createElement("button");
-    del.className = "del"; del.type = "button"; del.title = `Esborra "${name}"`; del.textContent = "×";
+    del.className = "del"; del.type = "button"; del.title = `Delete "${name}"`; del.textContent = "×";
     del.addEventListener("click", () => {
-      if (!confirm(`Esborrar el garatge desat "${name}"? No es pot desfer.`)) return;
+      if (!confirm(`Delete the saved garage "${name}"? This cannot be undone.`)) return;
       deleteSave(name); refreshSavedList();
     });
     li.append(load, del);
@@ -290,17 +290,17 @@ $("preset").value = S.veh;
 $("preset").addEventListener("change", (e) => {
   S.veh = +e.target.value; writeFields();
   const car = S.cars.find((c) => c.id === S.sel);
-  if (car) { car.t = S.veh; delete car.override; }   // torna a la biblioteca, descarta l'edicio manual
+  if (car) { car.t = S.veh; delete car.override; }   // back to the library, hand edits discarded
   invalidate(); updateHud();
 });
 
-/* El panell nomes edita L/W/B/Fo/D (diametre de gir vorera-a-vorera), igual
-   que el prototip original — turningMeasure es fixa perque l'entrada manual
-   no demana triar-lo. */
+/* The panel only edits L/W/B/Fo/D (kerb-to-kerb turning diameter), just like
+   the original prototype — turningMeasure is fixed because the hand-entry form
+   does not ask you to choose one. */
 function readFields() {
   const car = S.cars.find((c) => c.id === S.sel);
-  const entry = { name: "(editat)", L: +$("vL").value, W: +$("vW").value, B: +$("vB").value,
-    Fo: +$("vF").value, turning: +$("vD").value, turningMeasure: "diametre-vorera" };
+  const entry = { name: "(edited)", L: +$("vL").value, W: +$("vW").value, B: +$("vB").value,
+    Fo: +$("vF").value, turning: +$("vD").value, turningMeasure: "kerb-diameter" };
   if (car) car.override = entry;
 }
 function writeFields() {
@@ -320,10 +320,10 @@ function updateHud() {
   $("hudR").textContent = v.Rc.toFixed(2) + " m";
   $("hudOh").textContent = v.Fo.toFixed(2) + " m";
   $("hudCars").textContent = S.cars.length;
-  $("hudMsg").textContent = `Angle de direccio maxim ${(v.dmax * 180 / Math.PI).toFixed(0)}°`;
+  $("hudMsg").textContent = `Maximum steering angle ${(v.dmax * 180 / Math.PI).toFixed(0)}°`;
 }
 
-/* ------------------------------------------------------------ simulacio -- */
+/* ------------------------------------------------------------ simulation - */
 const yieldUI = () => new Promise((r) => setTimeout(r, 0));
 function setProgress(p) { $("progBar").style.width = (p * 100).toFixed(0) + "%"; }
 function setVerdict(ok, title, sub) {
@@ -335,25 +335,25 @@ function setVerdict(ok, title, sub) {
   $("results").innerHTML = "";
 }
 
-/* "exit"/"entry"/"both" — sempre en el pitjor cas (tots aparcats a la seva
-   plaça, vegeu planner.js). Cada mode te la seva funcio de motor, el seu
-   text de botó/verdicte i, per a "both", una forma de resultat diferent
-   (out[] porta {exit,entry} en comptes de {path,man,len}). */
+/* "exit"/"entry"/"both" — always the worst case (every car parked in its own
+   bay, see planner.js). Each mode has its own engine function, its own
+   button/verdict wording and, for "both", a different result shape (out[]
+   carries {exit,entry} instead of {path,man,len}). */
 const MODE = {
-  exit: { run: evacuate, btn: "Comprova les sortides", verb: "sortir", verbInf: "sortir-ne",
-    needs: (w) => hasExit(w), missing: "Falta una sortida.", missingSub: "Pinta almenys una cel·la de sortida al perimetre." },
-  entry: { run: arrive, btn: "Comprova les entrades", verb: "entrar-hi", verbInf: "entrar-hi",
-    needs: (w) => hasEntrance(w), missing: "Falta una entrada.", missingSub: "Pinta almenys una cel·la d'entrada al perimetre." },
-  both: { run: checkBothWays, btn: "Comprova l'accés", verb: "entrar i sortir", verbInf: "entrar-hi i sortir-ne",
-    needs: (w) => hasExit(w) && hasEntrance(w), missing: "Falta una entrada o una sortida.", missingSub: "Calen totes dues per comprovar l'accés complet." },
+  exit: { run: evacuate, btn: "Check the exits", verb: "get out",
+    needs: (w) => hasExit(w), missing: "No exit yet.", missingSub: "Paint at least one exit cell on the perimeter." },
+  entry: { run: arrive, btn: "Check the entrances", verb: "get in",
+    needs: (w) => hasEntrance(w), missing: "No entrance yet.", missingSub: "Paint at least one entrance cell on the perimeter." },
+  both: { run: checkBothWays, btn: "Check access", verb: "get in and out",
+    needs: (w) => hasExit(w) && hasEntrance(w), missing: "No entrance or no exit.", missingSub: "Both are needed to check full access." },
 };
 
 async function runSim() {
   const m = MODE[S.mode];
-  if (S.cars.length === 0) { setVerdict(null, "Encara no hi ha cap cotxe.", "Tria l'eina Cotxe i clica sobre una plaça."); return; }
+  if (S.cars.length === 0) { setVerdict(null, "No cars yet.", "Pick the Car tool and click on a bay."); return; }
   if (!m.needs(S.world)) { setVerdict(false, m.missing, m.missingSub); return; }
 
-  const btn = $("run"); btn.disabled = true; btn.textContent = "Calculant…";
+  const btn = $("run"); btn.disabled = true; btn.textContent = "Computing…";
   S.results = null; S.playing = null; redraw();
   const opts = { margin: +$("margin").value, maxMan: +$("maxMan").value, allowRev: $("allowRev").checked };
 
@@ -365,22 +365,22 @@ async function runSim() {
   setTimeout(() => setProgress(0), 600);
 }
 
-/* Trams del recorregut, un per marxa: "Endavant 3,40 m, girant a la dreta".
-   Ve de summariseManeuvers() (planner.js) — pura, sense DOM, ja provada. */
+/* Runs of the route, one per gear: "Forward 3.40 m, turning right". Comes from
+   summariseManeuvers() (planner.js) — pure, no DOM, already tested. */
 function maneuverList(path) {
-  return summariseManeuvers(path).map((s, i) => {
-    const dir = s.dir === "enrere" ? "Marxa enrere" : "Endavant";
-    const turn = s.turn === "recte" ? "" : `, girant a ${s.turn === "dreta" ? "la dreta" : "l'esquerra"}`;
+  return summariseManeuvers(path).map((s) => {
+    const dir = s.dir === "reverse" ? "Reverse" : "Forward";
+    const turn = s.turn === "straight" ? "" : `, turning ${s.turn}`;
     return `<li>${dir} ${s.distance.toFixed(2)} m${turn}</li>`;
   }).join("");
 }
 
 const WHY = {
-  blocked: "Hi cabria sol, pero altres cotxes aparcats el tapen",
-  geometry: "No hi ha prou espai per maniobrar, ni tot sol",
-  embedded: "No hi cap: a la plaça ja toca un mur o un altre cotxe",
-  tight: "Hi cap justet, pero no amb el marge de seguretat actual",
-  budget: "No s'ha trobat sortida dins del limit de maniobres",
+  blocked: "Would fit on its own, but other parked cars are in the way",
+  geometry: "Not enough room to manoeuvre, even on its own",
+  embedded: "Does not fit: in its bay it already touches a wall or another car",
+  tight: "Fits, but only just — not with the current safety margin",
+  budget: "No route found within the manoeuvre limit",
 };
 const AMBER_KINDS = new Set(["blocked", "tight", "budget"]);
 const label = (id) => {
@@ -392,10 +392,10 @@ function renderResults() {
   const { out, stuck, mode } = S.results;
   const m = MODE[mode];
   if (!stuck.length) {
-    setVerdict(true, `Tots ${out.length} cotxes poden ${m.verb}`, verdictOkSub(out, mode));
+    setVerdict(true, `All ${out.length} cars can ${m.verb}`, verdictOkSub(out, mode));
   } else {
-    setVerdict(false, `${stuck.length} de ${S.cars.length} no poden ${m.verb}`,
-      `${out.length} si que hi arriben. Clica un cotxe per veure'n el recorregut.`);
+    setVerdict(false, `${stuck.length} of ${S.cars.length} cannot ${m.verb}`,
+      `${out.length} do make it. Click a car to see its route.`);
   }
   const ul = $("results"); ul.innerHTML = "";
   if (mode === "both") renderBothResults(ul, out, stuck, S.results.diag);
@@ -406,10 +406,10 @@ function renderResults() {
 function verdictOkSub(out, mode) {
   if (mode === "both") {
     const worst = out.reduce((m2, o) => Math.max(m2, o.exit.man, o.entry.man), 0);
-    return `Com a maxim calen ${worst} maniobra${worst === 1 ? "" : "s"} en el cas mes dificil (entrant o sortint).`;
+    return `At most ${worst} manoeuvre${worst === 1 ? "" : "s"} in the hardest case (going in or out).`;
   }
   const worst = out.reduce((m2, o) => Math.max(m2, o.man), 0);
-  return `Com a maxim calen ${worst} maniobra${worst === 1 ? "" : "s"} en el cas mes dificil.`;
+  return `At most ${worst} manoeuvre${worst === 1 ? "" : "s"} in the hardest case.`;
 }
 
 function renderSingleResults(ul, out, stuck, diag) {
@@ -418,7 +418,7 @@ function renderSingleResults(ul, out, stuck, diag) {
     li.innerHTML = `<button class="res" data-id="${o.id}">
       <span class="dot" style="background:var(--green)"></span>
       <span><span class="name">${label(o.id)}</span>
-      <span class="why">${o.man} maniobre${o.man === 1 ? "" : "s"} · ${o.len.toFixed(1)} m</span></span>
+      <span class="why">${o.man} manoeuvre${o.man === 1 ? "" : "s"} · ${o.len.toFixed(1)} m</span></span>
       <span class="num">▶</span></button>
       <ol class="maneuvers">${maneuverList(o.path)}</ol>`;
     ul.appendChild(li);
@@ -434,10 +434,10 @@ function renderSingleResults(ul, out, stuck, diag) {
   }
 }
 
-/* Mode "both": out[] porta {id,exit,entry} (cadascun amb path/man/len) i
-   diag[id] porta {exit,entry} amb "ok" o el kind de cadascun — un cotxe pot
-   fallar nomes en un dels dos sentits. Cada fila be amb dos botons ▶
-   separats (entrada/sortida). */
+/* "both" mode: out[] carries {id,exit,entry} (each with path/man/len) and
+   diag[id] carries {exit,entry} with "ok" or the kind of each — a car can fail
+   in one direction only. Each row comes with two separate ▶ buttons
+   (entry/exit). */
 function renderBothResults(ul, out, stuck, diag) {
   for (const o of out) {
     const li = document.createElement("li");
@@ -445,11 +445,11 @@ function renderBothResults(ul, out, stuck, diag) {
       <div class="res-pair">
         <button class="res" data-id="${o.id}" data-dir="entry">
           <span class="dot" style="background:var(--focus)"></span>
-          <span><span class="dir">Entrada</span>
+          <span><span class="dir">In</span>
           <span class="why">${o.entry.man} man. · ${o.entry.len.toFixed(1)} m</span></span></button>
         <button class="res" data-id="${o.id}" data-dir="exit">
           <span class="dot" style="background:var(--green)"></span>
-          <span><span class="dir">Sortida</span>
+          <span><span class="dir">Out</span>
           <span class="why">${o.exit.man} man. · ${o.exit.len.toFixed(1)} m</span></span></button>
       </div>
       <ol class="maneuvers" id="man-${o.id}"></ol>`;
@@ -458,7 +458,7 @@ function renderBothResults(ul, out, stuck, diag) {
   for (const id of stuck) {
     const d = diag[id];
     const line = (dir, label2) => d[dir] === "ok" ? null : `${label2}: ${WHY[d[dir]?.kind || "geometry"]}`;
-    const lines = [line("entry", "Entrada"), line("exit", "Sortida")].filter(Boolean);
+    const lines = [line("entry", "In"), line("exit", "Out")].filter(Boolean);
     const anyAmber = ["entry", "exit"].some((dir) => d[dir] !== "ok" && AMBER_KINDS.has(d[dir]?.kind));
     const li = document.createElement("li");
     li.innerHTML = `<button class="res" data-id="${id}">
@@ -469,28 +469,28 @@ function renderBothResults(ul, out, stuck, diag) {
   }
 }
 
-/* Trams del recorregut que s'acaba de reproduir — nomes en mode "both", on
-   cada fila te dos ▶ (entrada/sortida) i la llista es compartida sota els
-   dos, aixi que cal actualitzar-la segons quin s'ha clicat. */
+/* Runs of the route that has just been played — only in "both" mode, where
+   each row has two ▶ (in/out) and the list is shared under both, so it has to
+   be updated according to which one was clicked. */
 function showManeuversFor(id, path) {
   const ol = document.getElementById(`man-${id}`);
   if (ol) ol.innerHTML = maneuverList(path);
 }
 
-/* L'animacio del recorregut es la manera principal de veure com es mou el
-   cotxe, no decoracio.
+/* The route animation is the main way of seeing how the car moves, not
+   decoration.
 
-   Per aixo fa DOS coses que abans no feia:
+   That is why it does TWO things it did not do before:
 
-   - Va en bucle, amb una pausa al final de cada volta. Abans es reproduia
-     un sol cop: si miraves un altre lloc de la pantalla t'ho perdies i no
-     hi havia manera de tornar-hi si no era clicant una altra vegada.
-   - No fa cas de "prefers-reduced-motion" per escurçar-la fins a fer-la
-     imperceptible. A molts PC amb Windows aquesta preferencia esta activada
-     pel sistema sense que l'usuari l'hagi triat per a res d'aixo, i deixava
-     l'animacio en 450 ms: un parpelleig. Amb moviment reduit la fem mes
-     lenta i sense bucle, que es el que demana de debo (menys moviment
-     sobtat), no invisible. */
+   - It loops, with a pause at the end of each lap. It used to play once: if
+     you were looking somewhere else on screen you missed it, with no way back
+     other than clicking again.
+   - It does not obey "prefers-reduced-motion" by shortening itself into
+     invisibility. On many Windows PCs that preference is switched on by the
+     system without the user having chosen it for anything like this, and it
+     left the animation at 450 ms: a blink. With reduced motion we make it
+     slower and non-looping, which is what the preference actually asks for
+     (less sudden movement), not invisible. */
 const HOLD_MS = 900;
 function animatePlaying(pathLen) {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -502,17 +502,17 @@ function animatePlaying(pathLen) {
     S.playing.t = p * (pathLen - 1);
     redraw();
     if (p < 1) { S.anim = requestAnimationFrame(tick); return; }
-    if (reduce) return;                       // una sola passada, sense bucle
+    if (reduce) return;                       // a single pass, no looping
     if (el < dur + HOLD_MS) { S.anim = requestAnimationFrame(tick); return; }
-    animatePlaying(pathLen);                  // torna a començar
+    animatePlaying(pathLen);                  // start over
   };
   S.anim = requestAnimationFrame(tick);
 }
 
-/* Per a un cotxe atrapat amb diagnostic "blocked", el motor ja sap quin
-   recorregut hauria fet tot sol i on xoca amb un altre cotxe (vegeu
-   checkDirection a planner.js) — en mode "both" cal triar quina direccio
-   ensenyar (la que en tingui, preferint sortida). */
+/* For a stuck car diagnosed as "blocked", the engine already knows which route
+   it would have taken on its own and where it hits another car (see
+   checkDirection in planner.js) — in "both" mode we have to pick which
+   direction to show (whichever has one, preferring the exit). */
 function blockedPathFor(id, dir) {
   const d = S.results?.diag?.[id];
   if (!d) return null;
@@ -534,10 +534,10 @@ function playCar(id, dir) {
     if (!blocked) { S.playing = { id, path: null, present: S.cars.map((c) => c.id), t: 0 }; redraw(); return; }
     if (both) showManeuversFor(id, blocked.path);
     S.playing = { id, path: blocked.path, present: S.cars.map((c) => c.id), t: 0, fail: true, hitAt: blocked.hitAt };
-    // El traç i la cinta ensenyen el recorregut sencer que hauria fet (per
-    // veure si l'hauria acabat fent servir), pero el cotxe animat s'atura
-    // exactament al punt de xoc — no te sentit que el dibuixem travessant
-    // l'altre cotxe com si no hi fos.
+    // The stroke and the footprint show the whole route it would have taken
+    // (to see whether it would have ended up using it), but the animated car
+    // stops exactly at the point of contact — there is no sense in drawing it
+    // driving through the other car as if it were not there.
     const hitIdx = blocked.hitAt ? blocked.path.indexOf(blocked.hitAt) : -1;
     animatePlaying(hitIdx >= 0 ? hitIdx + 1 : blocked.path.length);
     return;
@@ -557,12 +557,12 @@ $("mode").addEventListener("click", (e) => {
 });
 addEventListener("resize", fit);
 
-/* ------------------------------------------------------------------ tema - */
-/* Clar/fosc: per defecte segueix el sistema (@media al CSS, sense fer res
-   aqui — vegeu l'script al <head> que evita el flaix). El boto guarda una
-   tria explicita a localStorage, que sempre guanya. El canvas llegeix els
-   colors amb getComputedStyle en pintar (render.js: css()), aixi que un
-   canvi de tema nomes es veu si es torna a dibuixar — d'aqui els redraw(). */
+/* ----------------------------------------------------------------- theme - */
+/* Light/dark: by default it follows the system (@media in the CSS, nothing to
+   do here — see the script in <head> that avoids the flash). The button stores
+   an explicit choice in localStorage, which always wins. The canvas reads the
+   colours with getComputedStyle while painting (render.js: css()), so a theme
+   change is only visible if it is redrawn — hence the redraw() calls. */
 function effectiveTheme() {
   const explicit = document.documentElement.getAttribute("data-theme");
   if (explicit === "light" || explicit === "dark") return explicit;
@@ -575,13 +575,13 @@ $("themeToggle").addEventListener("click", () => {
   redraw();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  // nomes si l'usuari no ha triat res expressament — si ho ha fet, la seva
-  // tria mana per sobre del sistema.
+  // only if the user has not explicitly chosen — if they have, their choice
+  // wins over the system.
   if (!document.documentElement.hasAttribute("data-theme")) redraw();
 });
 
-/* --------------------------------------------------------------- arrenc -- */
+/* --------------------------------------------------------------- start --- */
 writeFields();
-loadPreset("buit");
+loadPreset("empty");
 updateHud();
 refreshSavedList();

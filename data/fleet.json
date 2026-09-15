@@ -1,51 +1,51 @@
 {
   "version": 1,
-  "nota": "Curat a ma. Cap xifra de gir no es pot fer servir sense el seu turningMeasure al costat: radi i diametre es confonen constantment, i vorera-a-vorera i paret-a-paret no son la mateixa mesura ni porten a la mateixa formula. Vegeu src/vehicle.js.",
+  "note": "Hand-curated. No turning figure may be used without its turningMeasure alongside it: radius and diameter get confused constantly, and kerb-to-kerb and wall-to-wall are neither the same measurement nor fed into the same formula. See src/vehicle.js.",
   "turningMeasures": {
-    "diametre-vorera": "Diametre del cercle que descriu la roda davantera exterior. El mes publicat pels fabricants.",
-    "radi-vorera": "El mateix, pero donat com a radi.",
-    "diametre-paret": "Diametre del cercle que descriu la cantonada davantera exterior de la carrosseria. Sempre mes gran que el de vorera.",
-    "radi-paret": "El mateix, pero donat com a radi."
+    "kerb-diameter": "Diameter of the circle described by the outer front wheel. The figure manufacturers publish most often.",
+    "kerb-radius": "The same, but given as a radius.",
+    "wall-diameter": "Diameter of the circle described by the outer front corner of the bodywork. Always larger than the kerb figure.",
+    "wall-radius": "The same, but given as a radius."
   },
   "vehicles": [
-    { "id": "generic-utilitari", "name": "Utilitari (genèric)",
+    { "id": "generic-supermini", "name": "Supermini (generic)",
       "L": 4.05, "W": 1.75, "B": 2.55, "Fo": 0.85,
-      "turning": 10.6, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "perfil genèric, no és cap model concret", "checked": "2026-09-14" },
+      "turning": 10.6, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "generic profile, not any specific model", "checked": "2026-09-14" },
 
-    { "id": "generic-compacte", "name": "Compacte (genèric)",
+    { "id": "generic-compact", "name": "Compact (generic)",
       "L": 4.28, "W": 1.79, "B": 2.62, "Fo": 0.88,
-      "turning": 10.9, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "perfil genèric, no és cap model concret", "checked": "2026-09-14" },
+      "turning": 10.9, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "generic profile, not any specific model", "checked": "2026-09-14" },
 
-    { "id": "generic-familiar", "name": "Familiar / SUV (genèric)",
+    { "id": "generic-estate", "name": "Estate / SUV (generic)",
       "L": 4.55, "W": 1.86, "B": 2.68, "Fo": 0.92,
-      "turning": 11.5, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "perfil genèric, no és cap model concret", "checked": "2026-09-14" },
+      "turning": 11.5, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "generic profile, not any specific model", "checked": "2026-09-14" },
 
-    { "id": "generic-furgoneta", "name": "Furgoneta (genèrica)",
+    { "id": "generic-van", "name": "Van (generic)",
       "L": 5.34, "W": 2.03, "B": 3.30, "Fo": 0.95,
-      "turning": 12.4, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "perfil genèric, no és cap model concret", "checked": "2026-09-14" },
+      "turning": 12.4, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "generic profile, not any specific model", "checked": "2026-09-14" },
 
     { "id": "seat-ibiza-2017", "name": "Seat Ibiza 2017",
       "L": 4.06, "W": 1.78, "B": 2.56, "Fo": 0.83,
-      "turning": 10.6, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "prototip legacy-engine.html, comprovat per l'usuari", "checked": "2026-09-14" },
+      "turning": 10.6, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "legacy-engine.html prototype, verified by the user", "checked": "2026-09-14" },
 
     { "id": "corolla-hatch-2023", "name": "Corolla hatchback 2023",
       "L": 4.37, "W": 1.79, "B": 2.64, "Fo": 0.94,
-      "turning": 10.4, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "prototip legacy-engine.html, comprovat per l'usuari", "checked": "2026-09-14" },
+      "turning": 10.4, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "legacy-engine.html prototype, verified by the user", "checked": "2026-09-14" },
 
     { "id": "corolla-ts-2023", "name": "Corolla Touring Sports 23",
       "L": 4.65, "W": 1.79, "B": 2.70, "Fo": 0.94,
-      "turning": 11.0, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "prototip legacy-engine.html, comprovat per l'usuari", "checked": "2026-09-14" },
+      "turning": 11.0, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "legacy-engine.html prototype, verified by the user", "checked": "2026-09-14" },
 
     { "id": "toyota-yaris-2023", "name": "Toyota Yaris 2023",
       "L": 3.94, "W": 1.75, "B": 2.56, "Fo": 0.80,
-      "turning": 10.4, "turningMeasure": "diametre-vorera",
-      "foEstimated": true, "source": "prototip legacy-engine.html, comprovat per l'usuari", "checked": "2026-09-14" }
+      "turning": 10.4, "turningMeasure": "kerb-diameter",
+      "foEstimated": true, "source": "legacy-engine.html prototype, verified by the user", "checked": "2026-09-14" }
   ]
 }

@@ -1,7 +1,7 @@
-/* Entrada, sortida i "entrada i sortida", sempre en el pitjor cas: tots els
-   cotxes aparcats, cadascun a la seva plaça (mai se suposa que algun ja ha
-   sortit, ni que encara no ha arribat) — vegeu planner.js: checkDirection(),
-   evacuate(), arrive(), checkBothWays(). */
+/* Entry, exit and "both ways", always the worst case: every car parked, each
+   one in its own bay (it is never assumed that one has already left, or that
+   one has not arrived yet) — see planner.js: checkDirection(), evacuate(),
+   arrive(), checkBothWays(). */
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -12,24 +12,24 @@ import { specOf } from "../src/vehicle.js";
 const OPTS = { margin: 0.15, maxMan: 14, allowRev: true };
 
 /* -------------------------------------------------------------- reversePath */
-test("reversePath: gira l'ordre i inverteix la marxa de cada tram", () => {
+test("reversePath: flips the order and inverts the gear of each run", () => {
   const path = [
-    { x: 0, y: 0, th: 0, dir: 0 },   // inici
-    { x: 1, y: 0, th: 0, dir: 1 },   // endavant
-    { x: 1, y: 0, th: 0.3, dir: 1 }, // endavant, girant
-    { x: 0.5, y: 0, th: 0.1, dir: -1 }, // enrere
+    { x: 0, y: 0, th: 0, dir: 0 },   // start
+    { x: 1, y: 0, th: 0, dir: 1 },   // forward
+    { x: 1, y: 0, th: 0.3, dir: 1 }, // forward, turning
+    { x: 0.5, y: 0, th: 0.1, dir: -1 }, // reverse
   ];
   const rev = reversePath(path);
   assert.equal(rev.length, path.length);
-  // el principi del recorregut girat es el final de l'original, i viceversa
+  // the start of the reversed route is the end of the original, and vice versa
   assert.deepEqual([rev[0].x, rev[0].y, rev[0].th], [0.5, 0, 0.1]);
-  assert.equal(rev[0].dir, 0, "el primer punt d'un recorregut no porta marxa");
+  assert.equal(rev[0].dir, 0, "the first point of a route carries no gear");
   assert.deepEqual([rev[3].x, rev[3].y, rev[3].th], [0, 0, 0]);
-  // cada marxa queda invertida respecte de l'original
+  // every gear is inverted with respect to the original
   assert.deepEqual(rev.map((p) => p.dir), [0, 1, -1, -1]);
 });
 
-test("reversePath: recorrer-lo dues vegades torna al recorregut original", () => {
+test("reversePath: applying it twice returns the original route", () => {
   const path = [
     { x: 0, y: 0, th: 0, dir: 0 },
     { x: 2, y: 1, th: 0.5, dir: 1 },
@@ -48,20 +48,20 @@ function entranceWorld() {
   return world;
 }
 
-test("arrive(): el recorregut girat acaba EXACTAMENT a la plaça aparcada", async () => {
+test("arrive(): the reversed route ends EXACTLY at the parked bay", async () => {
   const world = entranceWorld();
   const cars = makeCars();
   const car = cars.addM(6, 3, 0, 1);
   const r = await arrive(world, cars, OPTS);
   const o = r.out.find((x) => x.id === car.id);
-  assert.ok(o, "hauria de trobar com entrar-hi");
+  assert.ok(o, "it should find a way in");
   const last = o.path[o.path.length - 1];
   const st = rearAxle(car, specOf(car));
   assert.ok(Math.abs(last.x - st.x) < 1e-9 && Math.abs(last.y - st.y) < 1e-9 && Math.abs(last.th - st.th) < 1e-9,
-    "l'ultim punt del recorregut d'entrada ha de ser la posicio aparcada exacta");
+    "the last point of the arrival route has to be the exact parked position");
 });
 
-test("arrive(): sense cap ENTRANCE dibuixada, cap cotxe hi pot entrar", async () => {
+test("arrive(): with no ENTRANCE drawn, no car can get in", async () => {
   const world = newWorldM(10, 6);
   fillRectM(world, 0, 0, 10, 6, ASPH);
   fillRectM(world, 9, 2, 10, 4, EXIT);
@@ -73,33 +73,33 @@ test("arrive(): sense cap ENTRANCE dibuixada, cap cotxe hi pot entrar", async ()
 });
 
 /* ------------------------------------------------------------ checkBothWays */
-/* Escenari asimetric trobat empiricament: cotxe A hi pot entrar pero un
-   veí (B) li tapa nomes el cami de sortida; B, al reves, surt sense
-   problema pero no troba com tornar-hi a entrar. Prova que checkBothWays()
-   combina be els dos sentits per separat — no n'hi ha prou amb "ok" en un
-   dels dos. */
-test("checkBothWays(): un cotxe pot entrar-hi pero no sortir-ne, i cap dels dos compta com a accessible", async () => {
-  /* Passadis amb MURS de veritat a dalt i a baix. Abans era tot calçada i
-     la vora del mon feia de paret imaginaria: com que el cos del cotxe si
-     que pot sobresortir del dibuix (fora hi ha "el carrer", vegeu freeAt),
-     A podia esquivar B per fora i la asimetria que aquest test vol provar
-     desapareixia tan bon punt el cercador va millorar. Amb parets, B tapa
-     el pas de debo. */
+/* An asymmetric scenario found empirically: car A can get in but a neighbour
+   (B) blocks only its way out; B, the other way round, gets out without
+   trouble but cannot find a way back in. It proves that checkBothWays()
+   combines the two directions separately — "ok" in one of them is not
+   enough. */
+test("checkBothWays(): a car can get in but not out, and neither counts as accessible", async () => {
+  /* An aisle with real WALLS above and below. It used to be all roadway, with
+     the edge of the world acting as an imaginary wall: since the car's body
+     may stick out of the drawing (outside is "the street", see freeAt), A
+     could dodge B round the outside and the asymmetry this test is after
+     disappeared as soon as the search improved. With walls, B really does
+     block the way. */
   const world = newWorldM(14, 7);
-  fillRectM(world, 0, 0, 14, 7, 0);              // VOID: tot mur
-  fillRectM(world, 0, 0.5, 14, 6.5, ASPH);       // passadis de 6 m
+  fillRectM(world, 0, 0, 14, 7, 0);              // VOID: all wall
+  fillRectM(world, 0, 0.5, 14, 6.5, ASPH);       // 6 m aisle
   fillRectM(world, 0, 2.5, 1, 4.5, ENTRANCE);
   fillRectM(world, 13, 2.5, 14, 4.5, EXIT);
   const cars = makeCars();
   const a = cars.addM(6, 3.5, 0, 1);
-  const b = cars.addM(9.6, 3.5, 90, 1);          // travessat, tapa el pas cap a la sortida
+  const b = cars.addM(9.6, 3.5, 90, 1);          // across the aisle, blocking the way to the exit
 
   const [ex, en] = await Promise.all([evacuate(world, cars, OPTS), arrive(world, cars, OPTS)]);
-  assert.equal(ex.out.some((o) => o.id === a.id), false, "A: sortida hauria de fallar (B li tapa el pas)");
-  assert.equal(en.out.some((o) => o.id === a.id), true, "A: entrada hauria d'anar be");
+  assert.equal(ex.out.some((o) => o.id === a.id), false, "A: the exit should fail (B is in the way)");
+  assert.equal(en.out.some((o) => o.id === a.id), true, "A: the entry should be fine");
 
   const both = await checkBothWays(world, cars, OPTS);
-  assert.equal(both.out.length, 0, "cap dels dos hauria de comptar com a accessible en tots dos sentits");
+  assert.equal(both.out.length, 0, "neither should count as accessible in both directions");
   assert.deepEqual(new Set(both.stuck), new Set([a.id, b.id]));
   assert.equal(both.diag[a.id].entry, "ok");
   assert.notEqual(both.diag[a.id].exit, "ok");
@@ -107,7 +107,7 @@ test("checkBothWays(): un cotxe pot entrar-hi pero no sortir-ne, i cap dels dos 
   assert.notEqual(both.diag[b.id].entry, "ok");
 });
 
-test("checkBothWays(): un cotxe amb entrada i sortida amples surt a 'out' amb les dues rutes", async () => {
+test("checkBothWays(): a car with a wide entrance and exit lands in 'out' with both routes", async () => {
   const world = entranceWorld();
   const cars = makeCars();
   const car = cars.addM(6, 3, 0, 1);

@@ -1,19 +1,19 @@
-/* Geometria i col·lisions. Sense DOM i sense estat global: tot el que cal
-   arriba per paràmetre.
+/* Geometry and collisions. No DOM and no global state: everything needed
+   arrives as a parameter.
 
-   Un `world` és {cols, rows, grid, segs}: la graella de cel·les de CELL metres
-   i els segments de paret exactes. Les dues fonts de mur conviuen — el
-   planificador no sap quina ve d'on. */
+   A `world` is {cols, rows, grid, segs}: the grid of CELL-metre cells plus the
+   exact wall segments. The two sources of wall coexist — the planner does not
+   know which one a wall came from. */
 
 export const VOID = 0, ASPH = 1, SPOT = 2, EXIT = 3, ENTRANCE = 4, GATE = 5;
-export const CELL = 0.1;                    // metres per cel·la de dibuix
+export const CELL = 0.1;                    // metres per drawing cell
 
-/* ENTRANCE i EXIT son nomes informatius per a la col·lisio: per al
-   planificador i per exitField() son transitables exactament com ASPH/SPOT
-   (tot el que no es VOID es "terra"). GATE es un unic espai que fa de
-   sortida I d'entrada alhora (per exemple una sola porta de garatge que
-   s'usa en tots dos sentits) — planner.js el tracta com a objectiu valid
-   tant si es busca EXIT com si es busca ENTRANCE, vegeu isGoalCell(). */
+/* ENTRANCE and EXIT are purely informational as far as collision goes: to the
+   planner and to exitField() they are drivable exactly like ASPH/SPOT
+   (anything that is not VOID is "ground"). GATE is a single space that acts as
+   exit AND entrance at once (for instance a single garage door used in both
+   directions) — planner.js treats it as a valid goal whether the search is
+   looking for EXIT or for ENTRANCE, see isGoalCell(). */
 
 export const idx = (world, c, r) => r * world.cols + c;
 export const inBounds = (world, c, r) => c >= 0 && r >= 0 && c < world.cols && r < world.rows;
@@ -26,9 +26,9 @@ export function mkSeg(x1, y1, x2, y2) {
     miny: Math.min(y1, y2), maxy: Math.max(y1, y2) };
 }
 
-/* Segment de paret contra rectangle orientat: retallat de Liang-Barsky al
-   sistema de referència del cotxe. Exacte a qualsevol mida — és el que permet
-   plantes importades amb cotes com 4,15 m que no cauen a la graella. */
+/* Wall segment against oriented rectangle: Liang-Barsky clipping in the car's
+   frame of reference. Exact at any size — this is what makes imported floor
+   plans with dimensions like 4.15 m, which do not land on the grid, work. */
 export function segHitsOBB(sg, cx, cy, co, si, hl, hw) {
   const rad = hl + hw;
   if (sg.minx > cx + rad || sg.maxx < cx - rad || sg.miny > cy + rad || sg.maxy < cy - rad) return false;
@@ -47,9 +47,9 @@ export function segHitsOBB(sg, cx, cy, co, si, hl, hw) {
   return true;
 }
 
-/* Cel·la quadrada de la graella contra rectangle orientat (eixos separadors).
-   ex/ey són la mitja envolupant alineada als eixos del rectangle; les rep fetes
-   perquè qui crida això les reaprofita per acotar el rang de cel·les. */
+/* Square grid cell against oriented rectangle (separating axes). ex/ey are the
+   half axis-aligned bounding box of the rectangle; they are passed in already
+   computed because the caller reuses them to bound the range of cells. */
 export function cellHitsOBB(c, r, cx, cy, co, si, hl, hw, ex, ey) {
   const qx = (c + 0.5) * CELL - cx, qy = (r + 0.5) * CELL - cy;
   const h = CELL / 2;
@@ -61,21 +61,21 @@ export function cellHitsOBB(c, r, cx, cy, co, si, hl, hw, ex, ey) {
   return true;
 }
 
-/* Rectangle orientat contra rectangle orientat (cotxe contra cotxe). */
+/* Oriented rectangle against oriented rectangle (car against car). */
 export function obbHitsOBB(ax, ay, aco, asi, ahl, ahw, bx, by, bco, bsi, bhl, bhw) {
   const dx = bx - ax, dy = by - ay;
   const axes = [[aco, asi], [-asi, aco], [bco, bsi], [-bsi, bco]];
   for (const [ux, uy] of axes) {
     const pa = ahl * Math.abs(aco * ux + asi * uy) + ahw * Math.abs(-asi * ux + aco * uy);
     const pb = bhl * Math.abs(bco * ux + bsi * uy) + bhw * Math.abs(-bsi * ux + bco * uy);
-    if (Math.abs(dx * ux + dy * uy) > pa + pb) return false;   // eix separador trobat
+    if (Math.abs(dx * ux + dy * uy) > pa + pb) return false;   // separating axis found
   }
   return true;
 }
 
-/* ------------------------------------------------- camp de distàncies ----- */
+/* ----------------------------------------------------- distance field ----- */
 
-/* Transformada de distància exacta 1D (Felzenszwalb & Huttenlocher). */
+/* Exact 1D distance transform (Felzenszwalb & Huttenlocher). */
 function edt1d(f, n, d, v, z) {
   let k = 0; v[0] = 0; z[0] = -1e20; z[1] = 1e20;
   for (let q = 1; q < n; q++) {
@@ -87,10 +87,10 @@ function edt1d(f, n, d, v, z) {
   for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
 }
 
-/* Distància (m) de cada cel·la al mur més proper, subestimada de manera
-   conservadora. Només serveix per saltar-se la comprovació cel·la a cel·la quan
-   el cotxe és clarament en obert: mai pot dir "lliure" si no ho és.
-   Es memoritza al mateix `world`; scene.js la invalida en tocar el dibuix. */
+/* Distance (m) from each cell to the nearest wall, conservatively
+   underestimated. Its only job is to skip the cell-by-cell check when the car
+   is clearly in the open: it can never say "free" when it is not.
+   It is memoised on the `world` itself; scene.js invalidates it on any edit. */
 export function wallField(world) {
   if (world._wall) return world._wall;
   const { cols, rows, grid } = world;
@@ -116,7 +116,7 @@ export function wallField(world) {
   return out;
 }
 
-/* --------------------------------------------------------------- cua ------ */
+/* ------------------------------------------------------------- queue ------ */
 
 export class MinHeap {
   constructor() { this.k = []; this.v = []; }

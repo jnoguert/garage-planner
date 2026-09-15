@@ -1,8 +1,8 @@
-/* L'escena: la planta dibuixada, les parets exactes i els cotxes.
+/* The scene: the floor plan drawn, the exact walls and the cars.
 
-   Un `world` es {cols, rows, grid, segs} i es l'unica cosa que el planificador
-   necessita saber del mon. `_wall` es la memoria cau del camp de distancies als
-   murs; tot el que toca el dibuix la buida amb touch(). */
+   A `world` is {cols, rows, grid, segs} and it is the only thing the planner
+   needs to know about the world. `_wall` is the cache of the distance-to-wall
+   field; anything that touches the drawing clears it with touch(). */
 
 import { VOID, ASPH, SPOT, EXIT, ENTRANCE, GATE, CELL, mkSeg, idx, inBounds } from "./geometry.js";
 
@@ -12,18 +12,18 @@ export function newWorld(cols, rows) {
   return { cols, rows, grid: new Uint8Array(cols * rows).fill(VOID), segs: [], lines: [], _wall: null };
 }
 
-/* Equivalents en metres de newWorld/fillRect — independents de CELL. Per
-   descriure una planta amb mides reals sense haver de convertir a cel·les a
-   ma (i sense que un canvi de resolucio del dibuix trenqui el resultat). */
+/* Metric equivalents of newWorld/fillRect — independent of CELL. For
+   describing a floor plan in real dimensions without converting to cells by
+   hand (and without a change in drawing resolution breaking the result). */
 export function newWorldM(wm, hm) { return newWorld(Math.round(wm / CELL), Math.round(hm / CELL)); }
 export function fillRectM(world, x0, y0, x1, y1, type) {
   fillRect(world, Math.round(x0 / CELL), Math.round(y0 / CELL), Math.round(x1 / CELL) - 1, Math.round(y1 / CELL) - 1, type);
 }
 
-/* Qualsevol canvi al dibuix ha de passar per aqui: si no, el camp de murs
-   memoritzat es queda ranci i freeAt() es salta comprovacions que hauria de fer.
-   `_staticCache` es la capa de render memoritzada (render.js); tambe cal
-   buidar-la o el dibuix es queda vell. */
+/* Every change to the drawing has to go through here: otherwise the memoised
+   wall field goes stale and freeAt() skips checks it should be making.
+   `_staticCache` is the memoised render layer (render.js); it has to be
+   cleared too or the drawing stays old. */
 export function touch(world) { world._wall = null; world._staticCache = null; }
 
 export function setCell(world, c, r, type) {
@@ -41,7 +41,7 @@ export function fillRect(world, c0, r0, c1, r1, type) {
   touch(world);
 }
 
-/* Canviar la mida conserva el que ja hi ha dibuixat. */
+/* Resizing keeps whatever is already drawn. */
 export function resize(world, cols, rows) {
   const g = new Uint8Array(cols * rows).fill(VOID);
   for (let r = 0; r < Math.min(rows, world.rows); r++)
@@ -52,23 +52,22 @@ export function resize(world, cols, rows) {
   return world;
 }
 
-/* GATE compta per a tots dos: una sola porta que serveix d'entrada i de
-   sortida alhora (vegeu isGoalCell() a planner.js). */
+/* GATE counts for both: a single door that serves as entrance and exit at once
+   (see isGoalCell() in planner.js). */
 export function hasExit(world) { return world.grid.includes(EXIT) || world.grid.includes(GATE); }
 export function hasEntrance(world) { return world.grid.includes(ENTRANCE) || world.grid.includes(GATE); }
 
-/* --------------------------------------------------------------- linies -- */
-/* Línies rectes ortonormals (horitzontals o verticals) dibuixades amb
-   l'eina "Línia": es guarden a `world.lines` perque, a diferencia de la
-   resta del dibuix a ma, es puguin editar despres — canviar la llargada
-   sense haver de repintar a ull (vegeu setLineLength).
+/* ---------------------------------------------------------------- lines -- */
+/* Orthogonal straight lines (horizontal or vertical) drawn with the "Line"
+   tool: they are kept in `world.lines` so that, unlike the rest of the
+   freehand drawing, they can be edited afterwards — changing the length
+   without having to repaint by eye (see setLineLength).
 
-   ponytail: si s'esborra una part d'una línia amb la goma o el llapis,
-   l'entrada a `world.lines` es queda amb la llargada antiga (no es
-   retalla ni es torna a calcular a partir de la graella) — nomes canvia
-   quan s'edita explicitament amb setLineLength(). Prou per al cas d'us
-   (dibuixar una paret recta i ajustar-ne la mida), no per a qualsevol
-   combinacio possible d'edicions. */
+   ponytail: if part of a line is erased with the eraser or the pen, the entry
+   in `world.lines` keeps its old length (it is neither trimmed nor recomputed
+   from the grid) — it only changes when explicitly edited with
+   setLineLength(). Enough for the use case (draw a straight wall and adjust
+   its size), not for every possible combination of edits. */
 
 function paintLineRect(world, line, type) {
   const { x1, y1, x2, y2, halfWidth: hw } = line;
@@ -76,10 +75,10 @@ function paintLineRect(world, line, type) {
   else fillRectM(world, Math.min(x1, x2), y1 - hw, Math.max(x1, x2), y1 + hw, type);
 }
 
-/* (x0,y0) es l'extrem que queda FIXAT (on ha començat l'arrossegament);
-   (x1,y1) es on l'usuari ha deixat anar, projectat sobre l'eix horitzontal
-   o vertical segons quin dels dos moviments ha estat mes gran. Retorna la
-   línia creada, o null si ha quedat mes curta que una cel·la. */
+/* (x0,y0) is the end that stays FIXED (where the drag started); (x1,y1) is
+   where the user let go, projected onto the horizontal or vertical axis
+   depending on which of the two movements was larger. Returns the line
+   created, or null if it came out shorter than one cell. */
 export function addLine(world, x0, y0, x1, y1, halfWidth, type = VOID) {
   const horiz = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
   const line = {
@@ -94,10 +93,10 @@ export function addLine(world, x0, y0, x1, y1, halfWidth, type = VOID) {
   return line;
 }
 
-/* Torna a pintar la línia amb una llargada nova, mantenint FIX el primer
-   extrem (x1,y1 — on va comencar l'arrossegament original): esborra el
-   requadre vell (el torna a calçada oberta, com la goma) i en pinta un de
-   nou de la llargada demanada, en la mateixa direccio. */
+/* Repaints the line at a new length, keeping the first end FIXED (x1,y1 —
+   where the original drag started): it erases the old rectangle (back to open
+   roadway, like the eraser) and paints a new one of the requested length in
+   the same direction. */
 export function setLineLength(world, line, newLen) {
   const horiz = line.y1 === line.y2;
   const dir = Math.sign((horiz ? line.x2 - line.x1 : line.y2 - line.y1)) || 1;
@@ -110,19 +109,19 @@ export function setLineLength(world, line, newLen) {
 export function lineLength(line) { return Math.hypot(line.x2 - line.x1, line.y2 - line.y1); }
 export function lineMidpoint(line) { return { x: (line.x1 + line.x2) / 2, y: (line.y1 + line.y2) / 2 }; }
 
-/* ---------------------------------------------------------------- cotxes -- */
+/* ----------------------------------------------------------------- cars -- */
 
-/* Un cotxe: {id, t, cx, cy, th, override?}. `t` es l'index a FLEET, `cx/cy` el
-   centre del COS en metres, `th` en radians. `override` son cotes entrades a
-   ma i valen nomes per a aquest cotxe.
+/* A car: {id, t, cx, cy, th, override?}. `t` is the index into FLEET, `cx/cy`
+   the centre of the BODY in metres, `th` in radians. `override` holds
+   hand-entered dimensions and applies to this car only.
 
-   `existing` (opcional): cotxes ja fets, per exemple recuperats d'un
-   garatge desat (storage.js) — `nextId` continua just despres del mes alt
-   que ja hi hagi, aixi es pot seguir afegint-ne sense repetir id. */
+   `existing` (optional): cars that already exist, for instance restored from a
+   saved garage (storage.js) — `nextId` carries on right after the highest one
+   already there, so more can be added without repeating an id. */
 export function makeCars(existing = []) {
   let nextId = existing.reduce((m, c) => Math.max(m, c.id), 0) + 1;
   const cars = existing.slice();
-  cars.addM = (xm, ym, deg, t) => {          // en metres, per a planols reals
+  cars.addM = (xm, ym, deg, t) => {          // in metres, for real floor plans
     const car = { id: nextId++, t, cx: xm, cy: ym, th: deg * Math.PI / 180 };
     cars.push(car); return car;
   };
@@ -130,17 +129,17 @@ export function makeCars(existing = []) {
   return cars;
 }
 
-/* --------------------------------------------------------------- plantes -- */
+/* ----------------------------------------------------------- floor plans -- */
 
-/* Indexs de FLEET que fan servir els presets del garatge real. */
+/* FLEET indices used by the real-garage presets. */
 const GENERIC = 1, IBIZA = 4, COROLLA_TS = 6, YARIS = 7;
 
-/* Els presets de sota es van escriure en cel·les d'OLD_CELL=0,5 m (la
-   resolucio original de dibuix). En comptes de recalcular a ma cada mesura
-   per als 0,1 m actuals — 40 literals, facil d'equivocar-se — s'escalen amb
-   `fr`/`ac`/`nw`: mateixa fisica, cel·les mes fines. `fr` escala un rang
-   INCLUSIU: l'extrem final representa (c1+1)*OLD_CELL, no c1*OLD_CELL, i cal
-   arrodonir-ho aixi o el rang queda curt per (U-1) cel·les. */
+/* The presets below were written in cells of OLD_CELL=0.5 m (the original
+   drawing resolution). Rather than recompute every measurement by hand for
+   today's 0.1 m — 40 literals, easy to get wrong — they are scaled with
+   `fr`/`ac`/`nw`: same physics, finer cells. `fr` scales an INCLUSIVE range:
+   the far end represents (c1+1)*OLD_CELL, not c1*OLD_CELL, and it has to be
+   rounded that way or the range comes up (U-1) cells short. */
 const OLD_CELL = 0.5;
 const U = OLD_CELL / CELL;
 function nw(colsOld, rowsOld) { return newWorld(Math.round(colsOld * U), Math.round(rowsOld * U)); }
@@ -149,12 +148,12 @@ function fr(world, c0, r0, c1, r1, t) {
 }
 function ac(cars, cOld, rOld, deg, t) { return cars.addCell(cOld * U, rOld * U, deg, t); }
 
-/* Cada preset retorna {world, cars, veh}: `veh` es el model que queda
-   seleccionat al panell. */
+/* Each preset returns {world, cars, veh}: `veh` is the model left selected in
+   the panel. */
 export const presets = {
-  /* Dues fileres en bateria de 2,5 x 5,0 m, passadis central de 6 m i 2,5 m de
-     gir lliure als dos extrems del passadis. */
-  bateria() {
+  /* Two rows of 2.5 x 5.0 m bays, a 6 m central aisle and 2.5 m of free
+     turning space at each end of the aisle. */
+  bays() {
     const world = nw(60, 36), cars = makeCars();
     fr(world, 0, 2, 59, 33, ASPH);
     for (let i = 0; i < 10; i++) {
@@ -163,15 +162,15 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 7.0, 270, GENERIC);
       ac(cars, 7.5 + i * 5, 29.0, 90, GENERIC);
     }
-    fr(world, 0, 16, 2, 27, GATE);        // entrada i sortida combinades, un sol espai
+    fr(world, 0, 16, 2, 27, GATE);        // combined entrance and exit, a single space
     return { world, cars, veh: GENERIC };
   },
 
-  /* Pati tancat: quatre places al fons i dos cotxes aparcats al davant. */
+  /* Enclosed yard: four bays at the back and two cars parked in front. */
   tandem() {
     const world = nw(40, 34), cars = makeCars();
     fr(world, 0, 0, 39, 33, ASPH);
-    fr(world, 2, 0, 15, 1, GATE);         // entrada i sortida combinades, un sol espai
+    fr(world, 2, 0, 15, 1, GATE);         // combined entrance and exit, a single space
     for (let i = 0; i < 4; i++) {
       fr(world, 3 + i * 9, 24, 7 + i * 9, 33, SPOT);
       ac(cars, 5.5 + i * 9, 29.0, 90, GENERIC);
@@ -181,8 +180,8 @@ export const presets = {
     return { world, cars, veh: GENERIC };
   },
 
-  /* Les mateixes places, pero amb un passadis de nomes 4,5 m. */
-  estret() {
+  /* The same bays, but with an aisle of only 4.5 m. */
+  narrow() {
     const world = nw(50, 29), cars = makeCars();
     fr(world, 0, 0, 49, 28, ASPH);
     for (let i = 0; i < 8; i++) {
@@ -191,32 +190,32 @@ export const presets = {
       ac(cars, 7.5 + i * 5, 5.0, 270, GENERIC);
       ac(cars, 7.5 + i * 5, 24.0, 90, GENERIC);
     }
-    fr(world, 0, 12, 2, 21, GATE);        // entrada i sortida combinades, un sol espai
+    fr(world, 0, 12, 2, 21, GATE);        // combined entrance and exit, a single space
     return { world, cars, veh: GENERIC };
   },
 
-  /* Planta real (garatge d'un usuari concret): L de 19,70 x 4,15 m amb bloc
-     esquerre de 7,65 x 8,01 m, porta a l'extrem dret. Les parets van com a
-     SEGMENTS exactes perque 4,15 m no cau a la quadricula (ni a 0,5 m ni als
-     0,1 m actuals); la graella nomes s'hi ajusta per sobre, mai per dins. Es
-     exactament el cas per al qual existeix segHitsOBB().
-     No es un preset de l'aplicacio (no hi ha boto a la UI: es una planta
-     d'una persona concreta, no un exemple generic) — es queda nomes com a
-     fixture dels tests, que ja el fan servir per provar segments exactes i
-     folgances real·les. Per desar la teva propia planta, vegeu storage.js. */
-  garatge() {
+  /* A real floor plan (one particular user's garage): an L of 19.70 x 4.15 m
+     with a left-hand block of 7.65 x 8.01 m and the door at the right-hand
+     end. The walls go in as exact SEGMENTS because 4.15 m does not land on the
+     grid (neither at 0.5 m nor at today's 0.1 m); the grid only wraps around
+     them, never inside. This is exactly the case segHitsOBB() exists for.
+     It is not an application preset (no button in the UI: it is one specific
+     person's floor plan, not a generic example) — it stays only as a test
+     fixture, which already used it to exercise exact segments and real
+     clearances. To save your own floor plan, see storage.js. */
+  garage() {
     const world = nw(54, 18), cars = makeCars();
-    fr(world, 0, 0, 39, 8, ASPH);      // brac superior, y 0-4,15
-    fr(world, 0, 8, 15, 16, ASPH);     // bloc esquerre, y 4,15-8,01
-    fr(world, 39, 0, 53, 8, ASPH);     // repla exterior (fora de la porta)
-    fr(world, 41, 0, 44, 8, GATE);      // entrada i sortida combinades, fora del tot
+    fr(world, 0, 0, 39, 8, ASPH);      // upper arm, y 0-4.15
+    fr(world, 0, 8, 15, 16, ASPH);     // left-hand block, y 4.15-8.01
+    fr(world, 39, 0, 53, 8, ASPH);     // outside landing (beyond the door)
+    fr(world, 41, 0, 44, 8, GATE);      // combined entrance and exit, right outside
     const W = 19.70, D1 = 4.15, D2 = 8.01, LX = 7.65;
     world.segs = [
       mkSeg(0, 0, W, 0), mkSeg(W, D1, LX, D1), mkSeg(LX, D1, LX, D2),
       mkSeg(LX, D2, 0, D2), mkSeg(0, D2, 0, 0),
     ];
-    // Filera de quatre, morro cap a la porta, folgances iguals de 48 cm.
-    // Col·locats amb el Corolla llarg (Touring Sports).
+    // A row of four, nose towards the door, equal 48 cm clearances.
+    // Laid out with the long Corolla (Touring Sports).
     cars.addM(2.805, 2.075, 0, COROLLA_TS);
     cars.addM(7.935, 2.075, 0, COROLLA_TS);
     cars.addM(12.770, 2.075, 0, IBIZA);
@@ -224,10 +223,10 @@ export const presets = {
     return { world, cars, veh: COROLLA_TS };
   },
 
-  /* Variant amb tres cotxes: tots tres a la sala de l'esquerra, en tres
-     carrils, i el passadis lliure. El Corolla ha d'anar al carril del mig. */
-  garatge3() {
-    const { world } = presets.garatge();
+  /* Variant with three cars: all three in the left-hand room, in three lanes,
+     with the aisle clear. The Corolla has to go in the middle lane. */
+  garage3() {
+    const { world } = presets.garage();
     const cars = makeCars();
     cars.addM(3.00, 1.555, 0, IBIZA);
     cars.addM(3.00, 4.005, 0, COROLLA_TS);
@@ -235,10 +234,10 @@ export const presets = {
     return { world, cars, veh: COROLLA_TS };
   },
 
-  buit() {
+  empty() {
     const world = nw(60, 36), cars = makeCars();
     fr(world, 3, 2, 57, 33, ASPH);
-    fr(world, 0, 16, 2, 27, GATE);        // entrada i sortida combinades, un sol espai
+    fr(world, 0, 16, 2, 27, GATE);        // combined entrance and exit, a single space
     return { world, cars, veh: GENERIC };
   },
 };

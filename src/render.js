@@ -1,8 +1,8 @@
-/* Tot el dibuix a canvas. Cap logica de motor viu aqui: nomes llegeix `world`,
-   `cars` i l'estat de reproduccio/seleccio que li passa app.js.
+/* All the canvas drawing. No engine logic lives here: it only reads `world`,
+   `cars` and the playback/selection state app.js hands it.
 
-   El "terra" no es dibuixa com una textura decorativa: la calçada/plaça/
-   sortida ja marquen l'espai, i el que hi ha fora es simplement fons. */
+   The "ground" is not drawn as decorative texture: roadway/bay/exit already
+   mark out the space, and whatever lies outside is simply background. */
 
 import { VOID, SPOT, EXIT, ENTRANCE, GATE, CELL, idx, inBounds } from "./geometry.js";
 import { centreFromRear } from "./planner.js";
@@ -11,10 +11,10 @@ import { specOf } from "./vehicle.js";
 export const PALETTE = ["#93a6b3", "#b57a63", "#7a9a76", "#9789b4", "#c2a45c", "#6f9aa8", "#b0798f", "#849070"];
 
 export function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-/* `--xxx-rgb` es defineix al CSS com a triplet "r,g,b" (sense "rgba(...)")
-   nomes per a aixo: construir un color amb l'alpha que calgui en cada cas,
-   sense hardcodejar el mateix RGB dues vegades (un a --xxx i un altre aqui)
-   ni haver de mantenir sincronitzats dos temes a ma. */
+/* `--xxx-rgb` is defined in the CSS as an "r,g,b" triplet (not "rgba(...)")
+   purely for this: building a colour with whatever alpha each case needs,
+   without hardcoding the same RGB twice (once in --xxx and again here) or
+   having to keep two themes in sync by hand. */
 export function cssRgba(n, alpha) { return `rgba(${css(n + "-rgb")},${alpha})`; }
 
 export function makeView(cv) {
@@ -43,12 +43,11 @@ function roundRect(ctx, x, y, w, h, r) {
 
 export function angDiff(a, b) { let d = (a - b) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
 
-/* ------------------------------------------------------------------ cotxe - */
-/* Silueta de cotxe vist des de dalt: carrosseria, sostre/habitacle mes
-   fosc, parabrisa i lluna posterior translucides, retrovisors i rodes als
-   quatre cantons. Tot vectorial (Path2D sobre el canvas), no cap imatge
-   raster — aixi cada cotxe es pinta del seu color (PALETTE) sense haver de
-   mantenir una variant per color. */
+/* -------------------------------------------------------------------- car - */
+/* Top-down car silhouette: body, darker roof/cabin, translucent windscreen
+   and rear window, wing mirrors and wheels at the four corners. All vector
+   (paths on the canvas), no raster image — that way each car is painted in its
+   own colour (PALETTE) without having to keep a variant per colour. */
 export function drawCar(V, pose, v, color, num, selected, status, moving) {
   const { ctx, px, py, view: { s } } = V;
   ctx.save();
@@ -56,7 +55,7 @@ export function drawCar(V, pose, v, color, num, selected, status, moving) {
   ctx.rotate(pose.th);
   const L = v.L * s, W = v.W * s, rr = Math.min(L, W) * 0.22;
 
-  // rodes: peeking una mica per fora de la carrosseria, als quatre cantons
+  // wheels: peeking out slightly past the body, at the four corners
   const wheelL = L * 0.20, wheelW = W * 0.11;
   ctx.fillStyle = "rgba(10,11,13,.9)";
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -64,24 +63,24 @@ export function drawCar(V, pose, v, color, num, selected, status, moving) {
     ctx.beginPath(); roundRect(ctx, wx, wy, wheelL, wheelW, wheelW * 0.4); ctx.fill();
   }
 
-  // carrosseria
+  // body
   ctx.beginPath(); roundRect(ctx, -L / 2, -W / 2, L, W, rr);
   ctx.fillStyle = color; ctx.fill();
 
-  // ombra suau del capot i el maleter (dona volum sense necessitar una imatge)
+  // soft shading on bonnet and boot (gives volume without needing an image)
   const grad = ctx.createLinearGradient(-L / 2, 0, L / 2, 0);
   grad.addColorStop(0, "rgba(0,0,0,.16)"); grad.addColorStop(0.28, "rgba(0,0,0,0)");
   grad.addColorStop(0.72, "rgba(0,0,0,0)"); grad.addColorStop(1, "rgba(0,0,0,.16)");
   ctx.beginPath(); roundRect(ctx, -L / 2, -W / 2, L, W, rr);
   ctx.fillStyle = grad; ctx.fill();
 
-  // sostre / habitacle: rectangle mes fosc, no arriba als extrems (hi ha
-  // capot i maleter a banda i banda)
+  // roof / cabin: darker rectangle, stopping short of the ends (there is a
+  // bonnet and a boot on either side)
   const cabinL = L * 0.5, cabinX = -L * 0.03;
   ctx.beginPath(); roundRect(ctx, cabinX - cabinL / 2, -W / 2 + W * 0.09, cabinL, W - W * 0.18, rr * 0.7);
   ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.fill();
 
-  // parabrisa (davant) i lluna posterior (darrere): trapezis translúcids
+  // windscreen (front) and rear window (back): translucent trapezoids
   ctx.fillStyle = "rgba(210,228,235,.55)";
   ctx.beginPath();
   const wsX = cabinX + cabinL / 2;
@@ -94,7 +93,7 @@ export function drawCar(V, pose, v, color, num, selected, status, moving) {
   ctx.lineTo(rwX - L * 0.06, W / 2 - W * 0.24); ctx.lineTo(rwX, W / 2 - W * 0.12);
   ctx.closePath(); ctx.fill();
 
-  // retrovisors
+  // wing mirrors
   ctx.fillStyle = "rgba(10,11,13,.75)";
   for (const sy of [-1, 1]) {
     ctx.beginPath();
@@ -102,13 +101,13 @@ export function drawCar(V, pose, v, color, num, selected, status, moving) {
     ctx.fill();
   }
 
-  // fars: dos punts clars al morro
+  // headlights: two light dots at the nose
   ctx.fillStyle = "rgba(255,244,214,.9)";
   for (const sy of [-1, 1]) {
     ctx.beginPath(); ctx.arc(L / 2 - L * 0.05, sy * (W * 0.28), Math.max(0.6, W * 0.05), 0, 7); ctx.fill();
   }
 
-  // contorn: verd/ambre/vermell segons el resultat, o just un traç fi
+  // outline: green/amber/red depending on the result, or just a thin stroke
   ctx.beginPath(); roundRect(ctx, -L / 2, -W / 2, L, W, rr);
   ctx.lineWidth = Math.max(1, s * 0.05);
   ctx.strokeStyle = status === "red" ? css("--red") : status === "amber" ? css("--amber")
@@ -132,12 +131,12 @@ export function drawCar(V, pose, v, color, num, selected, status, moving) {
   }
 }
 
-/* --------------------------------------------------------------- mesures - */
-/* Trams de vora entre una cel·la de mur (VOID) i una cel·la transitable
-   veïna, fusionats en segments rectes — el mateix criteri que ja fa servir
-   el dibuix de la "vorada" (nomes vores interiors, mai la del marc del
-   mapa). Serveix per etiquetar en metres les parets que es dibuixen a mà,
-   igual que mkSeg ja ho permet per als segments exactes d'un plànol importat. */
+/* ------------------------------------------------------------ dimensions - */
+/* Runs of edge between a wall cell (VOID) and a drivable neighbour, merged
+   into straight segments — the same criterion the "kerb" drawing already uses
+   (interior edges only, never the map frame). It labels hand-drawn walls in
+   metres, just as mkSeg already allows for the exact segments of an imported
+   floor plan. */
 function wallBoundaryRuns(world, minLen) {
   const { cols, rows, grid } = world;
   const isWall = (c, r) => grid[idx(world, c, r)] === VOID;
@@ -170,20 +169,19 @@ function wallBoundaryRuns(world, minLen) {
   return runs;
 }
 
-/* Amplada neta de cada obertura d'entrada (o entrada+sortida combinada, GATE)
-   dibuixada: component connex de cel·les de `matchType`, amplada = el costat
-   LLARG del seu requadre englobant — no el curt. Un forat en un mur es
-   sempre mes prim en la direccio en que travessa el mur (el gruix del mur,
-   normalment pocs cm) que en la direccio en que hi passa el cotxe (l'amplada
-   real que importa); el costat curt nomes diu quin gruix de mur s'ha
-   foradat, no si el cotxe hi cap. Bug real trobat (i corregit): amb
-   Math.min() enlloc de max(), el preset "bateria" (obertura real de 6,00 m)
-   ensenyava "1,50 m" — semblava impossible d'entendre per que un cotxe hi
-   podia passar. Es la mesura de seguretat real (l'entrada es un forat en un
-   mur — vegeu test/entrance.test.js: si es massa estreta, el cotxe hi toca
-   els brancals igual que a qualsevol altre pas). Diferent de
-   wallBoundaryRuns: aquella etiqueta la llargada dels trams de MUR, no
-   l'amplada del buit. */
+/* Clear width of each entrance opening drawn (or combined entrance+exit,
+   GATE): a connected component of `matchType` cells, width = the LONG side of
+   its bounding box, not the short one. A hole in a wall is always thinner in
+   the direction that crosses the wall (the wall thickness, usually a few cm)
+   than in the direction the car drives through (the real width that matters);
+   the short side only says how thick a wall was punched through, not whether
+   the car fits. Real bug found (and fixed): with Math.min() instead of max(),
+   the "bays" preset (a real 6.00 m opening) showed "1.50 m" — it looked
+   impossible to understand why a car could get through. This is the real
+   safety-relevant measurement (an entrance is a hole in a wall — see
+   test/entrance.test.js: if it is too narrow, the car touches the jambs just
+   like at any other tight spot). Different from wallBoundaryRuns: that one
+   labels the length of WALL runs, not the width of the gap. */
 function entranceOpenings(world, minLen, matchType) {
   const { cols, rows, grid } = world;
   const seen = new Uint8Array(cols * rows);
@@ -213,18 +211,18 @@ function entranceOpenings(world, minLen, matchType) {
   return openings;
 }
 
-/* El xip de les etiquetes de mesura es sempre fosc amb text clar,
-   independentment del tema clar/fosc de la pagina: al damunt hi pot haver
-   calçada, plaça o sortida de qualsevol color, i un xip d'alt contrast fix
-   es llegeix be sobre tots — mes senzill que fer-lo dependre del tema. */
+/* The dimension-label chip is always dark with light text, regardless of the
+   page's light/dark theme: underneath it there may be roadway, a bay or an
+   exit in any colour, and one fixed high-contrast chip reads well over all of
+   them — simpler than making it depend on the theme. */
 const DIM_CHIP_BG = "rgba(18,20,23,.82)";
 const DIM_CHIP_TEXT = "#c7ccd2";
 const DIM_CHIP_ENTRANCE_TEXT = "#8ecdf0";
 
 function drawDimensions(V, world) {
   const { ctx, px, py, view: { s } } = V;
-  if (s < 14) return;                    // massa lluny per llegir-hi res
-  const minLen = Math.max(0.3, 20 / s);  // en metres de pantalla, no en el mon
+  if (s < 14) return;                    // too far out to read anything
+  const minLen = Math.max(0.3, 20 / s);  // in screen metres, not world metres
   const runs = [...wallBoundaryRuns(world, minLen), ...world.segs.filter((g) => g.len ?? Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= minLen)];
 
   ctx.font = `500 ${Math.max(9, s * 0.24)}px "Barlow",sans-serif`;
@@ -256,14 +254,14 @@ function drawDimensions(V, world) {
   }
 }
 
-/* ------------------------------------------------------- capa estatica --- */
-/* Tot el que nomes depen del `world` (superficie, vores, marques de plaça,
-   sortides/entrades, segments exactes, mesures) es dibuixa un sol cop a un
-   canvas apart i es memoritza — nomes es refà quan es toca el dibuix
-   (scene.js invalida `_staticCache` a touch()) o quan canvia el zoom. Sense
-   aixo, a la graella de 10cm (fins a 25x mes cel·les que abans) cada frame
-   hauria de recorrer-les totes, i mentre s'arrossega el llapis aixo es cada
-   frame. */
+/* --------------------------------------------------------- static layer --- */
+/* Everything that depends only on the `world` (surface, edges, bay markings,
+   exits/entrances, exact segments, dimensions) is drawn once onto a separate
+   canvas and memoised — it is only rebuilt when the drawing is touched
+   (scene.js invalidates `_staticCache` in touch()) or when the zoom changes.
+   Without this, on the 10 cm grid (up to 25x more cells than before) every
+   frame would have to walk all of them, and while the pen is being dragged
+   that means every frame. */
 function buildStaticLayer(world, view) {
   const canvas = document.createElement("canvas");
   const dpr = Math.min(2, devicePixelRatio || 1);
@@ -350,10 +348,10 @@ function staticLayer(world, view) {
   return canvas;
 }
 
-/* `play`: null, o {id, path|null, present:[ids], t}. `hover`: {x,y} en
-   metres, nomes quan tool==="car". `previewTh`: angle (rad) del fantasma de
-   col·locacio. `previewLine`: {x1,y1,x2,y2} en metres mentre s'arrossega
-   l'eina Línia. `statusOf(id)`: "ok"|"amber"|"red"|null. */
+/* `play`: null, or {id, path|null, present:[ids], t}. `hover`: {x,y} in
+   metres, only when tool==="car". `previewTh`: angle (rad) of the placement
+   ghost. `previewLine`: {x1,y1,x2,y2} in metres while the Line tool is being
+   dragged. `statusOf(id)`: "ok"|"amber"|"red"|null. */
 export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewTh, previewLine, statusOf } = {}) {
   const { ctx, px, py, view } = V;
   const w = ctx.canvas.clientWidth, h = ctx.canvas.clientHeight;
@@ -367,19 +365,19 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     const v = specOf(cars.find((c) => c.id === play.id) || {});
     const hw = v.W / 2, hl = v.L / 2;
     const pts = play.path.map((p) => centreFromRear(p.x, p.y, p.th, v));
-    // El pas 0 es la sortida, encara sense marxa (DIR=0): compta com endavant.
+    // Step 0 is the start, still without a gear (DIR=0): it counts as forward.
     const isRev = (i) => play.path[i].dir < 0;
 
-    /* L'empremta escombrada: el cotxe SENCER (L x W, morro i cul inclosos),
-       no una cinta de l'amplada al voltant del centre — en girar, el morro
-       escombra molt mes enfora que el punt mig, i es justament el que frega
-       les cantonades. Es la unio del rectangle a cada pose.
+    /* The swept footprint: the WHOLE car (L x W, nose and tail included), not
+       a ribbon of its width around the centre — when turning, the nose sweeps
+       much further out than the midpoint, and that is exactly what clips the
+       corners. It is the union of the rectangle at every pose.
 
-       Un sol path i un sol fill PER MARXA: amb un fill per rectangle, els
-       centenars de poses se superposen i la tinta s'acumula fins a quedar
-       opac; amb un de sol, la regla "nonzero" els fusiona i la unio queda
-       d'un to uniforme. Dos passades (endavant i enrere) i no una de sola
-       perque van de colors diferents. */
+       One path and one fill PER GEAR: with a fill per rectangle, the hundreds
+       of overlapping poses accumulate ink until they go opaque; with a single
+       one, the "nonzero" rule merges them and the union comes out an even
+       tone. Two passes (forward and reverse) rather than one because they are
+       different colours. */
     for (const rev of [false, true]) {
       ctx.fillStyle = cssRgba(rev ? "--rev" : "--fwd", .17);
       ctx.beginPath();
@@ -389,7 +387,7 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
         any = true;
         const p = play.path[i], c = pts[i];
         const co = Math.cos(p.th), si = Math.sin(p.th);
-        // cantonades: centre +- (hl al llarg) +- (hw de costat)
+        // corners: centre +- (hl along) +- (hw across)
         const ax = co * hl, ay = si * hl, bx = -si * hw, by = co * hw;
         ctx.moveTo(px(c.cx + ax + bx), py(c.cy + ay + by));
         ctx.lineTo(px(c.cx + ax - bx), py(c.cy + ay - by));
@@ -400,9 +398,9 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
       if (any) ctx.fill();
     }
 
-    // El traç del centre, tram a tram segons la marxa: blau endavant, groc
-    // enrere. Cada tram es pinta amb la marxa del seu punt d'arribada, que
-    // es la que el cotxe hi porta mentre el recorre.
+    // The centreline stroke, run by run according to the gear: blue forward,
+    // yellow reverse. Each run is painted with the gear of its end point,
+    // which is the one the car is in while driving it.
     ctx.lineWidth = Math.max(1.6, view.s * 0.09); ctx.globalAlpha = .9;
     for (const rev of [false, true]) {
       ctx.strokeStyle = css(rev ? "--rev" : "--fwd");
@@ -417,11 +415,11 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     ctx.globalAlpha = 1;
   }
 
-  /* `play.present` son els cotxes que hi havia mentre es calculava el
-     recorregut; la resta no es dibuixen. El que s'esta MOVENT no hi es mai
-     (present = "tots els altres"), i per aixo quedava amagat: es veia el
-     traç i el cotxe enlloc — l'animacio semblava que no hi fos. Sempre es
-     dibuixa, faltaria mes. */
+  /* `play.present` are the cars that were there while the route was computed;
+     the rest are not drawn. The one that is MOVING is never in that list
+     (present = "all the others"), which is why it ended up hidden: you saw the
+     stroke and no car — the animation looked like it was not there. It is
+     always drawn, naturally. */
   const hidden = new Set();
   if (play) cars.forEach((c) => {
     if (c.id !== play.id && !play.present.includes(c.id)) hidden.add(c.id);
@@ -440,10 +438,10 @@ export function draw(V, world, cars, { sel, play, hover, tool, curSpec, previewT
     drawCar(V, pose, vc, PALETTE[i % PALETTE.length], i + 1, car.id === sel, statusOf?.(car.id) ?? null, moving);
   });
 
-  /* El punt exacte on el recorregut queda barrat per un altre cotxe (nomes
-     el diagnostic "blocked" el porta — vegeu checkDirection a planner.js).
-     Va DESPRES dels cotxes a proposit: el cotxe animat s'atura justament
-     aqui, i si es dibuixava abans el tapava sencer. */
+  /* The exact point where the route is blocked by another car (only the
+     "blocked" diagnosis carries it — see checkDirection in planner.js). It
+     goes AFTER the cars deliberately: the animated car stops right here, and
+     drawn before, the car covered it completely. */
   if (play?.fail && play.hitAt) {
     const v = specOf(cars.find((c) => c.id === play.id) || {});
     const hc = centreFromRear(play.hitAt.x, play.hitAt.y, play.hitAt.th, v);

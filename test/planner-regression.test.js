@@ -1,7 +1,7 @@
-/* Els bugs que ja hem trobat, convertits en tests.
+/* The bugs we have already found, turned into tests.
 
-   Qualsevol canvi futur al planificador o a la col·lisio ha de passar per aqui
-   abans de donar-se per bo. */
+   Any future change to the planner or to the collision has to get through here
+   before it counts as good. */
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -15,38 +15,39 @@ const D8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
             [1, 1, 1.4142], [1, -1, 1.4142], [-1, 1, 1.4142], [-1, -1, 1.4142]];
 
 /* ================================================================ BUG 1 ====
-   El camp de distancies a la sortida i el closed set del Hybrid A* comparaven
-   costos amb un epsilon minuscul sobre Float32Array. L'arrodoniment de float32
-   (~1e-7 en aquestes magnituds) supera l'epsilon, de manera que la MATEIXA
-   relaxacio es torna a acceptar cada vegada i la cua no es buida mai.
+   The distance-to-exit field and the closed set of the Hybrid A* compared
+   costs with a tiny epsilon over a Float32Array. Float32 rounding (~1e-7 at
+   these magnitudes) exceeds the epsilon, so the SAME relaxation is accepted
+   again every time and the queue never empties.
 
-   Mesurat sobre aquest codi: amb Float64Array cada cel·la surt de la cua ~1,0
-   cops. Amb Float32Array, 1389x el nombre de cel·les al preset "bateria" i
-   2069x a "estret" sense acabar — no es que vagi lent, es que no acaba.
+   Measured on this code: with Float64Array each cell comes off the queue ~1.0
+   times. With Float32Array, 1389x the number of cells on the "bays" preset and
+   2069x on "narrow" without finishing — it is not that it is slow, it is that
+   it does not finish.
 
-   Per aixo el test no fa servir el rellotge (seria inestable i, a mes, un
-   penjament no es pot cronometrar): compta quantes vegades surt cada cel·la de
-   la cua. Es determinista i falla a l'instant.                              */
+   That is why the test does not use the clock (it would be flaky and, besides,
+   a hang cannot be timed): it counts how many times each cell comes off the
+   queue. It is deterministic and fails instantly.                           */
 
-for (const name of ["bateria", "estret", "tandem"]) {
-  test(`bug 1: exitField("${name}") no reomple la cua`, () => {
+for (const name of ["bays", "narrow", "tandem"]) {
+  test(`bug 1: exitField("${name}") does not refill the queue`, () => {
     const { world } = presets[name]();
     const stats = {};
     const d = exitField(world, EXIT, stats);
     const N = world.cols * world.rows;
 
     assert.ok(d instanceof Float64Array,
-      "exitField ha de fer servir Float64Array: amb Float32Array la cua no es buida mai");
+      "exitField has to use Float64Array: with Float32Array the queue never empties");
 
-    // Marge ample a proposit: el valor sa es ~1,0x i el malalt >1000x.
+    // Deliberately wide margin: the healthy value is ~1.0x and the sick one >1000x.
     assert.ok(stats.pops < 3 * N,
-      `la cua s'ha reomplert: ${stats.pops} extraccions per a ${N} cel·les ` +
-      `(${(stats.pops / N).toFixed(1)}x). El valor sa es ~1,0x. Algu hi ha posat Float32Array?`);
+      `the queue refilled: ${stats.pops} pops for ${N} cells ` +
+      `(${(stats.pops / N).toFixed(1)}x). The healthy value is ~1.0x. Did someone put Float32Array back?`);
   });
 
-  test(`bug 1: exitField("${name}") convergeix de debo`, () => {
-    // El camp ha de ser un punt fix real de Dijkstra: cap aresta relaxable.
-    // Amb float32 aquesta propietat es trenca molt abans que amb float64.
+  test(`bug 1: exitField("${name}") really converges`, () => {
+    // The field has to be a genuine fixed point of Dijkstra: no relaxable edge.
+    // With float32 this property breaks long before it does with float64.
     const { world } = presets[name]();
     const d = exitField(world);
     let worst = 0, on = null;
@@ -62,42 +63,42 @@ for (const name of ["bateria", "estret", "tandem"]) {
         if (slack > worst) { worst = slack; on = `(${c},${r})->(${nc},${nr})`; }
       }
     }
-    assert.ok(worst < 1e-9, `arestes encara relaxables: ${worst.toExponential(2)} a ${on}`);
+    assert.ok(worst < 1e-9, `edges still relaxable: ${worst.toExponential(2)} at ${on}`);
   });
 }
 
-/* El closed set de plan() tambe ha de ser Float64Array, pel mateix motiu. Aqui
-   el float32 NO es manifesta com un penjament sino com a resultats PITJORS: al
-   preset "tandem" en fa sortir menys dels que hi caben. Per tant el que el
-   guarda es el resultat, no el comptador. */
-test("bug 1: el closed set no degrada el resultat (tandem)", async () => {
-  /* Amb el closed set en float32 l'arrodoniment supera l'epsilon de
-     comparacio i la cerca es degrada: surten menys cotxes dels que poden.
-     Aixo es el que vigila aquest test.
+/* The closed set of plan() has to be a Float64Array too, for the same reason.
+   Here float32 does NOT show up as a hang but as WORSE results: on the
+   "tandem" preset it gets fewer cars out than fit. So what guards it is the
+   result, not the counter. */
+test("bug 1: the closed set does not degrade the result (tandem)", async () => {
+  /* With the closed set in float32 the rounding exceeds the comparison epsilon
+     and the search degrades: fewer cars get out than can. That is what this
+     test watches for.
 
-     Assercio: han de sortir-ne TOTS. Es el maxim possible, o sigui que no es
-     una xifra que calgui anar retocant cada cop que el cercador millora
-     (abans hi deia "4 dels 6" i va quedar obsoleta en pujar NTH a 72); en
-     canvi qualsevol degradacio de la cerca la trenca de seguida. */
+     Assertion: ALL of them have to get out. That is the maximum possible, so
+     it is not a figure that needs tweaking every time the search improves (it
+     used to say "4 of the 6" and went stale when NTH went up to 72); any
+     degradation of the search, on the other hand, breaks it immediately. */
   const { world, cars } = presets.tandem();
   const r = await evacuate(world, cars, OPTS);
-  assert.equal(r.out.length, cars.length, "tandem: tots els cotxes hi caben, no se n'ha de perdre cap per la cerca");
+  assert.equal(r.out.length, cars.length, "tandem: every car fits, none should be lost to the search");
   assert.equal(r.stuck.length, 0);
 });
 
 /* ================================================================ BUG 2 ====
-   Invariant: un marge de seguretat MES GRAN no pot facilitar mai la sortida.
-   Es geometria pura — el cotxe engreixat cap a tot arreu on hi cabia el prim.
-   Si el planificador diu "surt" amb marge m, ha de dir "surt" per a tot m' < m.
+   Invariant: a LARGER safety margin can never make leaving easier. It is pure
+   geometry — the fattened car fits everywhere the thin one did. If the planner
+   says "gets out" at margin m, it has to say "gets out" for every m' < m.
 
-   Una violacio d'aixo es SEMPRE un bug del cercador (discretitzacio de l'espai
-   (x, y, angle)), mai de la geometria.                                      */
+   A violation of this is ALWAYS a bug in the search (discretisation of the
+   (x, y, angle) space), never in the geometry.                              */
 
-const MARGES = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40];
+const MARGINS = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40];
 
-/* Comprova la monotonia per a cada cotxe d'una planta, amb tots els altres
-   cotxes presents. Retorna la llista de violacions trobades. */
-function violacionsDeMonotonia(preset) {
+/* Checks monotonicity for each car of a floor plan, with all the other cars
+   present. Returns the list of violations found. */
+function monotonicityViolations(preset) {
   const { world, cars } = presets[preset]();
   const hf = exitField(world);
   const all = cars.map((c) => c.id);
@@ -105,12 +106,12 @@ function violacionsDeMonotonia(preset) {
   for (const car of cars) {
     const obs = obstaclesFor(world, cars, car.id, all);
     const v = specOf(car);
-    const seq = MARGES.map((m) => plan(world, car, obs, hf, v, { ...OPTS, margin: m }).ok);
+    const seq = MARGINS.map((m) => plan(world, car, obs, hf, v, { ...OPTS, margin: m }).ok);
     for (let i = 1; i < seq.length; i++) {
       if (seq[i] && !seq[i - 1]) {
         found.push(
-          `${preset} cotxe ${cars.indexOf(car)} (${v.name}): ` +
-          `marge ${MARGES[i - 1].toFixed(2)} = NO SURT pero ${MARGES[i].toFixed(2)} = SURT ` +
+          `${preset} car ${cars.indexOf(car)} (${v.name}): ` +
+          `margin ${MARGINS[i - 1].toFixed(2)} = NO EXIT but ${MARGINS[i].toFixed(2)} = EXIT ` +
           `[${seq.map((b) => (b ? "1" : "0")).join("")}]`
         );
       }
@@ -119,66 +120,65 @@ function violacionsDeMonotonia(preset) {
   return found;
 }
 
-for (const name of ["garatge", "garatge3", "tandem"]) {
-  test(`bug 2: un marge mes gran no facilita la sortida ("${name}")`, () => {
-    const v = violacionsDeMonotonia(name);
-    assert.deepEqual(v, [], `monotonia trencada:\n  ${v.join("\n  ")}`);
+for (const name of ["garage", "garage3", "tandem"]) {
+  test(`bug 2: a larger margin does not make leaving easier ("${name}")`, () => {
+    const v = monotonicityViolations(name);
+    assert.deepEqual(v, [], `monotonicity broken:\n  ${v.join("\n  ")}`);
   });
 }
 
-/* ⚠ BUG OBERT, no una regressio.
+/* ⚠ OPEN BUG, not a regression.
 
-   Els bins de 0,15 m i el pas de 36 a 72 sectors (10 -> 5 graus) han reduit
-   molt aquest problema, pero NO l'han eliminat: el preset "estret" encara el
-   dona. Amb 36 sectors hi havia 4 violacions i nomes en sortien 5 dels 16
-   cotxes; amb 72 en surten 16 de 16 i queden 3 violacions, totes a marges
-   grans (0,20 en amunt), alla on el passadis ja va tan just que un parell de
-   centimetres decideixen:
+   The 0.15 m bins and the move from 36 to 72 sectors (10 -> 5 degrees) have
+   greatly reduced this problem, but they have NOT eliminated it: the "narrow"
+   preset still shows it. With 36 sectors there were 4 violations and only 5 of
+   the 16 cars got out; with 72, 16 of 16 get out and 3 violations remain, all
+   at large margins (0.20 and up), where the aisle is already so tight that a
+   couple of centimetres decide it:
 
-     estret cotxe 3:  marge 0.20 no SURT / 0.25 SURT
-     estret cotxe 6:  marge 0.30 no SURT / 0.35 SURT
-     estret cotxe 12: marge 0.35 no SURT / 0.40 SURT
+     narrow car 3:  margin 0.20 NO EXIT / 0.25 EXIT
+     narrow car 6:  margin 0.30 NO EXIT / 0.35 EXIT
+     narrow car 12: margin 0.35 NO EXIT / 0.40 EXIT
 
-   Els fracassos son "noroute" amb ~1400 expansions, contra ~2800 quan te exit:
-   la cua s'ha buidat d'hora. Amb el pressupost intacte i una ruta que existeix
-   tant amb un marge mes petit com amb un de mes gran, nomes pot ser que el
-   closed set descarti estats que calien — l'artefacte classic de discretitzacio
-   del Hybrid A*, no la geometria.
+   The failures are "noroute" with ~1400 expansions, against ~2800 when there
+   is an exit: the queue emptied early. With the budget untouched and a route
+   that exists both at a smaller margin and at a larger one, it can only be
+   that the closed set is discarding states that were needed — the classic
+   Hybrid A* discretisation artefact, not the geometry.
 
-   Queda marcat com a `todo` per no amagar-lo: surt a cada execucio dels tests i
-   el dia que algu ho arregli, aquest test comencara a passar.                */
-test("bug 2: monotonia a \"estret\" (BUG OBERT, encara falla)", { todo: "la resolucio mes fina ho va reduir pero no ho va eliminar; vegeu el comentari" }, () => {
-  const v = violacionsDeMonotonia("estret");
-  assert.deepEqual(v, [], `monotonia trencada:\n  ${v.join("\n  ")}`);
+   It is marked `todo` so as not to hide it: it shows up on every test run, and
+   the day someone fixes it, this test will start passing.                   */
+test("bug 2: monotonicity on \"narrow\" (OPEN BUG, still failing)", { todo: "the finer resolution reduced it but did not eliminate it; see the comment" }, () => {
+  const v = monotonicityViolations("narrow");
+  assert.deepEqual(v, [], `monotonicity broken:\n  ${v.join("\n  ")}`);
 });
 
 /* ================================================================ BUG 3 ====
-   Una zona d'entrada/sortida mes prima que STEP (0,22 m) en la direccio
-   d'avanc quedava "saltada per sobre": el cotxe hi passaria fisicament
-   (cap col·lisio, cap paret), pero el pas discret ateria just abans i el
-   seguent just despres, sense que cap dels dos caigues a dins de la zona
-   objectiu — plan() acabava en "noroute" tot i que un recorregut recte i
-   trivial existia.
+   An entrance/exit zone thinner than STEP (0.22 m) in the direction of travel
+   was being "jumped over": the car would physically pass through it (no
+   collision, no wall), but the discrete step landed just before and the next
+   one just after, with neither falling inside the goal zone — plan() ended in
+   "noroute" even though a trivially straight route existed.
 
-   Reproduit amb una sala oberta i una franja EXIT de nomes 0,1-0,15 m de
-   fondaria enmig del pas: fallava sempre abans del fix, ara hi arriba amb
-   un nombre d'expansions estable (no varia amb la fondaria, senyal que ja
-   no depen de si un aterratge "cau be" o no).
+   Reproduced with an open room and an EXIT strip only 0.1-0.15 m deep in the
+   middle of the way: it always failed before the fix, and now it gets there
+   with a stable number of expansions (it does not vary with the depth, a sign
+   that it no longer depends on whether a landing point "falls nicely").
 
-   Fix: subGoalPose() (planner.js) comprova, per a cada tram candidat, si
-   l'ARC hi passa per sobre en algun dels 4 sub-punts — no nomes si
-   l'aterratge final hi cau a dins — nomes quan l'heuristica ja diu que
-   som a prop (hh < STEP*1,5), perque cridar-ho sempre multiplicava per 4
-   el temps de cerca sencer sense guanyar res la immensa majoria de cops
-   que no hi ha cap zona objectiu a prop. */
-test("bug 3: una zona d'entrada/sortida mes prima que STEP no queda saltada", async () => {
+   Fix: subGoalPose() (planner.js) checks, for each candidate step, whether the
+   ARC passes over the zone at any of 4 sub-points — not only whether the final
+   landing point falls inside — and only when the heuristic already says we are
+   close (hh < STEP*1.5), because calling it always quadrupled the whole search
+   time while gaining nothing the vast majority of the time, when there is no
+   goal zone nearby. */
+test("bug 3: an entrance/exit zone thinner than STEP is not jumped over", async () => {
   for (const depth of [0.1, 0.15, 0.2]) {
     const world = newWorldM(20, 10);
     fillRectM(world, 0, 0, 20, 10, ASPH);
-    fillRectM(world, 10, 4, 10 + depth, 6, EXIT);   // franja prima enmig de l'obert
+    fillRectM(world, 10, 4, 10 + depth, 6, EXIT);   // thin strip in the middle of the open
     const cars = makeCars();
     cars.addM(2.5, 5.0, 0, 1);
     const res = await evacuate(world, cars, OPTS);
-    assert.equal(res.out.length, 1, `fondaria ${depth}m: hauria de trobar un recorregut recte i trivial`);
+    assert.equal(res.out.length, 1, `depth ${depth}m: it should find a trivially straight route`);
   }
 });

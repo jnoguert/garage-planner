@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Converteix una llista de segments de paret (x1,y1,x2,y2 en metres) a
-crides mkSeg() per enganxar a un preset de src/scene.js.
+"""Convert a list of wall segments (x1,y1,x2,y2 in metres) into mkSeg() calls
+to paste into a preset in src/scene.js.
 
-Entrada: un CSV sense capcalera, una paret per linia: x1,y1,x2,y2
-Sortida: les linies JS, a stdout.
+Input: a headerless CSV, one wall per line: x1,y1,x2,y2
+Output: the JS lines, on stdout.
 
-Us:  python tools/import_plan.py planol.csv
-     python tools/import_plan.py planol.csv --json  > planol.json
+Usage:  python tools/import_plan.py plan.csv
+        python tools/import_plan.py plan.csv --json  > plan.json
 
-Nomes biblioteca estandard. Sense aixo, els segments d'una planta real (com
-el garatge de l'usuari, amb cotes com 4.15 m) s'escriuen a ma dins scene.js.
+Standard library only. Without this, the segments of a real floor plan (like
+the user's garage, with dimensions such as 4.15 m) have to be written by hand
+inside scene.js.
 """
 import csv
 import json
@@ -24,10 +25,10 @@ def read_segments(path):
             if not row or row[0].startswith("#"):
                 continue
             if len(row) != 4:
-                raise ValueError(f"linia {lineno}: calen 4 valors x1,y1,x2,y2, n'hi ha {len(row)}: {row}")
+                raise ValueError(f"line {lineno}: 4 values x1,y1,x2,y2 are required, got {len(row)}: {row}")
             x1, y1, x2, y2 = (float(v) for v in row)
             if x1 == x2 and y1 == y2:
-                raise ValueError(f"linia {lineno}: segment de longitud zero ({x1},{y1})")
+                raise ValueError(f"line {lineno}: zero-length segment ({x1},{y1})")
             segs.append((x1, y1, x2, y2))
     return segs
 
@@ -53,14 +54,14 @@ def main(argv):
 
 
 def _demo():
-    """ponytail: comprovacio minima en lloc d'una suite de tests per 40 linies."""
+    """ponytail: a minimal check instead of a test suite for 40 lines."""
     import os
     import tempfile
 
     fd, path = tempfile.mkstemp(suffix=".csv")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write("# comentari, s'ignora\n0,0,19.7,0\n19.7,4.15,7.65,4.15\n")
+            f.write("# a comment, ignored\n0,0,19.7,0\n19.7,4.15,7.65,4.15\n")
         segs = read_segments(path)
         assert segs == [(0.0, 0.0, 19.7, 0.0), (19.7, 4.15, 7.65, 4.15)], segs
         js = to_js(segs)
@@ -76,7 +77,7 @@ def _demo():
                 f.write("0,0,0,0\n")
             try:
                 read_segments(bad)
-                raise AssertionError("hauria d'haver llancat per longitud zero")
+                raise AssertionError("should have raised for a zero-length segment")
             except ValueError:
                 pass
         finally:
